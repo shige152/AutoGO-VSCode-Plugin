@@ -1,0 +1,492 @@
+{
+  "name": "qq1522355574-autogo",
+  "displayName": "AutoGo-Plugin",
+  "description": "AutoGo VS Code 扩展，提供项目初始化、运行调试、设备连接与 Android/iOS 编译能力。",
+  "version": "1.2.12",
+  "publisher": "weijinyichu",
+  "icon": "AutoGo.png",
+  "engines": {
+    "vscode": "^1.96.2"
+  },
+  "targets": [
+    {
+      "target": "win32-x64",
+      "path": "."
+    },
+    {
+      "target": "win32-arm64",
+      "path": "."
+    },
+    {
+      "target": "darwin-x64",
+      "path": "."
+    },
+    {
+      "target": "darwin-arm64",
+      "path": "."
+    }
+  ],
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "AutoGo",
+    "Auto",
+    "ag",
+    "go"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "插件配置",
+      "properties": {
+        "AutoGo.adbPath": {
+          "type": "string",
+          "default": "",
+          "description": "adb.exe完整路径"
+        },
+        "AutoGo.showLogTime": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否显示日志时间"
+        },
+        "AutoGo.packso": {
+          "type": "boolean",
+          "default": false,
+          "description": "编译时SO依赖一并打包嵌入"
+        },
+        "AutoGo.apkArchitectures": {
+          "type": "object",
+          "default": {
+            "arm64-v8a": true,
+            "x86_64": true,
+            "x86": true
+          },
+          "description": "APK打包包含的架构"
+        },
+        "AutoGo.selectedDevice": {
+          "type": "string",
+          "default": "",
+          "description": "The serial number of the selected ADB device for AutoGo operations."
+        },
+        "AutoGo.debugMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否启用 DEBUG 模式，显示详细的命令执行日志。"
+        },
+        "AutoGo.customCommands": {
+          "type": "array",
+          "default": [],
+          "description": "自定义终端命令列表"
+        },
+        "AutoGo.customFiles": {
+          "type": "array",
+          "default": [],
+          "description": "自定义文件应用列表"
+        },
+        "AutoGo.customUrls": {
+          "type": "array",
+          "default": [],
+          "description": "自定义URL链接列表"
+        },
+        "AutoGo.showContextMenu": {
+          "type": "boolean",
+          "default": true,
+          "description": "在编辑器右键菜单中显示 AutoGo 菜单"
+        },
+        "AutoGo.targetPlatform": {
+          "type": "string",
+          "default": "android",
+          "enum": [
+            "android",
+            "ios"
+          ],
+          "description": "目标平台：android 或 ios"
+        },
+        "AutoGo.sdkChangelogUrl": {
+          "type": "string",
+          "default": "",
+          "description": "AutoGo SDK 更新日志地址（可选，启用“更新 AutoGo 版本”功能时配置）"
+        },
+        "AutoGo.sdkDownloadBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "AutoGo SDK 下载基础地址（可选，例如 https://example.com/sdk/）"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "AutoGo.run",
+        "title": "运行项目",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.stop",
+        "title": "停止运行",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.connect",
+        "title": "连接设备",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.init",
+        "title": "初始项目",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.syncFiles",
+        "title": "同步资源",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.nodeaid",
+        "title": "节点助手",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.setADBPath",
+        "title": "ADB设置 (内部)",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.settings",
+        "title": "基础设置",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.compileARM64",
+        "title": "arm64-v8a",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.compileAMD64",
+        "title": "x86_64",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.compileAMD",
+        "title": "x86",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.compileAPK",
+        "title": "APK",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.compileIOS",
+        "title": "iOS 二进制",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.compileIPA",
+        "title": "IPA 安装包",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.showAGHelp",
+        "title": "显示 AG.exe 帮助",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.pushFile",
+        "title": "推送文件",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.pushFolder",
+        "title": "推送目录",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.runCustomCommand",
+        "title": "运行终端命令",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.runCustomFile",
+        "title": "打开文件应用",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.runCustomUrl",
+        "title": "打开网页链接",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.toggleLogViewLocation",
+        "title": "切换 AutoGo 日志视图位置",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.updateAutoGo",
+        "title": "更新AutoGo版本",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.quickDebugMainGo",
+        "title": "快速调试",
+        "category": "AutoGo"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "AutoGo.run",
+        "key": "f5",
+        "mac": "f5",
+        "when": "editorTextFocus",
+        "args": {
+          "skipUri": true
+        }
+      },
+      {
+        "command": "AutoGo.stop",
+        "key": "f12",
+        "mac": "f12",
+        "when": "editorTextFocus"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "autoGoLogContainer",
+          "title": "AutoGo 日志",
+          "icon": "AutoGo.png"
+        }
+      ]
+    },
+    "views": {
+      "autoGoLogContainer": [
+        {
+          "id": "autoGoLogView",
+          "name": "日志输出",
+          "type": "webview",
+          "contextualTitle": "AutoGo 日志",
+          "icon": "AutoGo.png"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "AutoGo.submenu",
+        "label": "🐋 AutoGo 🐋"
+      },
+      {
+        "id": "AutoGo.submenu.compile",
+        "label": "编译项目"
+      },
+      {
+        "id": "AutoGo.submenu.quickConfig",
+        "label": "快捷配置"
+      },
+      {
+        "id": "AutoGo.submenu.files",
+        "label": "文件操作"
+      },
+      {
+        "id": "AutoGo.submenu.settings",
+        "label": "设置"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "submenu": "AutoGo.submenu",
+          "group": "navigation",
+          "when": "config.AutoGo.showContextMenu"
+        }
+      ],
+      "AutoGo.submenu": [
+        {
+          "command": "AutoGo.run",
+          "group": "1_main@1"
+        },
+        {
+          "command": "AutoGo.stop",
+          "group": "1_main@2"
+        },
+        {
+          "command": "AutoGo.quickDebugMainGo",
+          "group": "1_main@3"
+        },
+        {
+          "command": "AutoGo.connect",
+          "group": "1_main@4"
+        },
+        {
+          "command": "AutoGo.nodeaid",
+          "group": "1_main@5"
+        },
+        {
+          "submenu": "AutoGo.submenu.compile",
+          "group": "2_compile"
+        },
+        {
+          "submenu": "AutoGo.submenu.quickConfig",
+          "group": "3_config"
+        },
+        {
+          "submenu": "AutoGo.submenu.files",
+          "group": "4_files"
+        },
+        {
+          "submenu": "AutoGo.submenu.settings",
+          "group": "5_settings"
+        }
+      ],
+      "AutoGo.submenu.compile": [
+        {
+          "command": "AutoGo.compileARM64",
+          "group": "1_arch@1",
+          "when": "config.AutoGo.targetPlatform == 'android'"
+        },
+        {
+          "command": "AutoGo.compileAMD64",
+          "group": "1_arch@2",
+          "when": "config.AutoGo.targetPlatform == 'android'"
+        },
+        {
+          "command": "AutoGo.compileAMD",
+          "group": "1_arch@3",
+          "when": "config.AutoGo.targetPlatform == 'android'"
+        },
+        {
+          "command": "AutoGo.compileAPK",
+          "group": "2_apk",
+          "when": "config.AutoGo.targetPlatform == 'android'"
+        },
+        {
+          "command": "AutoGo.compileIOS",
+          "group": "1_ios@1",
+          "when": "config.AutoGo.targetPlatform == 'ios'"
+        },
+        {
+          "command": "AutoGo.compileIPA",
+          "group": "2_ios@1",
+          "when": "config.AutoGo.targetPlatform == 'ios'"
+        }
+      ],
+      "AutoGo.submenu.quickConfig": [
+        {
+          "command": "AutoGo.runCustomCommand",
+          "group": "1_custom@1"
+        },
+        {
+          "command": "AutoGo.runCustomFile",
+          "group": "1_custom@2"
+        },
+        {
+          "command": "AutoGo.runCustomUrl",
+          "group": "1_custom@3"
+        }
+      ],
+      "AutoGo.submenu.files": [
+        {
+          "command": "AutoGo.init",
+          "group": "1_files@1"
+        },
+        {
+          "command": "AutoGo.pushFile",
+          "group": "1_files@2"
+        },
+        {
+          "command": "AutoGo.pushFolder",
+          "group": "1_files@3"
+        },
+        {
+          "command": "AutoGo.syncFiles",
+          "group": "1_files@4"
+        }
+      ],
+      "AutoGo.submenu.settings": [
+        {
+          "command": "AutoGo.settings",
+          "group": "1_settings@1"
+        },
+        {
+          "command": "AutoGo.updateAutoGo",
+          "group": "1_settings@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "echo 'Skipping prepublish - using pre-built platform-specific assets'",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "package:win32": "cross-env VSCE_TARGET=win32-x64 webpack --mode production --devtool hidden-source-map",
+    "package:win32-arm64": "cross-env VSCE_TARGET=win32-arm64 webpack --mode production --devtool hidden-source-map",
+    "package:darwin": "cross-env VSCE_TARGET=darwin-x64 webpack --mode production --devtool hidden-source-map",
+    "package:darwin-arm64": "cross-env VSCE_TARGET=darwin-arm64 webpack --mode production --devtool hidden-source-map",
+    "package:windows-all": "npm run clean && npm run package:win32 && npm run package:win32-arm64",
+    "package:macos-all": "npm run clean && npm run package:darwin && npm run package:darwin-arm64",
+    "package:all": "npm run clean && npm run package:win32 && npm run package:win32-arm64 && npm run package:darwin && npm run package:darwin-arm64",
+    "vsce:package:win32": "npm run clean && npm run package:win32 && vsce package --target win32-x64",
+    "vsce:package:win32-arm64": "npm run clean && npm run package:win32-arm64 && vsce package --target win32-arm64",
+    "vsce:package:darwin": "npm run clean && npm run package:darwin && vsce package --target darwin-x64",
+    "vsce:package:darwin-arm64": "npm run clean && npm run package:darwin-arm64 && vsce package --target darwin-arm64",
+    "vsce:package:windows-all": "npm run vsce:package:win32 && npm run vsce:package:win32-arm64",
+    "vsce:package:macos-all": "npm run vsce:package:darwin && npm run vsce:package:darwin-arm64",
+    "vsce:package:all": "npm run vsce:package:win32 && npm run vsce:package:win32-arm64 && npm run vsce:package:darwin && npm run vsce:package:darwin-arm64",
+    "publish:win32-x64": "npm run clean && npm run package:win32 && vsce publish --target win32-x64",
+    "publish:win32-arm64": "npm run clean && npm run package:win32-arm64 && vsce publish --target win32-arm64",
+    "publish:darwin-x64": "npm run clean && npm run package:darwin && vsce publish --target darwin-x64",
+    "publish:darwin-arm64": "npm run clean && npm run package:darwin-arm64 && vsce publish --target darwin-arm64",
+    "publish:all": "npm run publish:win32-x64 && npm run publish:win32-arm64 && npm run publish:darwin-x64 && npm run publish:darwin-arm64",
+    "ovsx:package:win32": "npm run clean && npm run package:win32 && vsce package --target win32-x64",
+    "ovsx:package:win32-arm64": "npm run clean && npm run package:win32-arm64 && vsce package --target win32-arm64",
+    "ovsx:package:darwin": "npm run clean && npm run package:darwin && vsce package --target darwin-x64",
+    "ovsx:package:darwin-arm64": "npm run clean && npm run package:darwin-arm64 && vsce package --target darwin-arm64",
+    "ovsx:package:windows-all": "npm run ovsx:package:win32 && npm run ovsx:package:win32-arm64",
+    "ovsx:package:macos-all": "npm run ovsx:package:darwin && npm run ovsx:package:darwin-arm64",
+    "ovsx:package:all": "npm run ovsx:package:win32 && npm run ovsx:package:win32-arm64 && npm run ovsx:package:darwin && npm run ovsx:package:darwin-arm64",
+    "ovsx:publish:win32-x64": "npm run clean && npm run package:win32 && ovsx publish -t win32-x64",
+    "ovsx:publish:win32-arm64": "npm run clean && npm run package:win32-arm64 && ovsx publish -t win32-arm64",
+    "ovsx:publish:darwin-x64": "npm run clean && npm run package:darwin && ovsx publish -t darwin-x64",
+    "ovsx:publish:darwin-arm64": "npm run clean && npm run package:darwin-arm64 && ovsx publish -t darwin-arm64",
+    "ovsx:publish:all": "npm run ovsx:publish:win32-x64 && npm run ovsx:publish:win32-arm64 && npm run ovsx:publish:darwin-x64 && npm run ovsx:publish:darwin-arm64",
+    "clean": "rimraf dist out coverage",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node scripts/run-unit-tests.js",
+    "test:unit": "npm run compile-tests && node scripts/run-unit-tests.js",
+    "test:integration": "npm run compile-tests && node out/test/integration/runTests.js",
+    "check:utf8": "node scripts/check-utf8.js",
+    "validate": "npm test && npm run check:utf8 && npm run package"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^18.19.130",
+    "@types/uuid": "^9.0.0",
+    "@types/vscode": "^1.96.2",
+    "@types/ws": "^8.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.52.0",
+    "@typescript-eslint/parser": "^8.52.0",
+    "@vscode/test-electron": "^2.4.1",
+    "copy-webpack-plugin": "^13.0.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.0",
+    "mocha": "^10.8.2",
+    "rimraf": "^5.0.10",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.5.3",
+    "webpack": "^5.93.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "@vscode/webview-ui-toolkit": "^1.4.0",
+    "adm-zip": "^0.5.16",
+    "node-stream-zip": "^1.15.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.14.0"
+  },
+  "license": "MIT"
+}

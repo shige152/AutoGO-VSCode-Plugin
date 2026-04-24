@@ -1,0 +1,167 @@
+/* webview-ui/settings/vscode.css */
+/* Basic reset and body styles */
+body {
+	font-family: var(--vscode-font-family);
+	font-weight: var(--vscode-font-weight);
+	font-size: var(--vscode-font-size);
+	color: var(--vscode-foreground);
+	background-color: var(--vscode-editor-background);
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Links */
+a {
+	color: var(--vscode-textLink-foreground);
+	text-decoration: none;
+}
+
+a:hover,
+a:active {
+	color: var(--vscode-textLink-activeForeground);
+	text-decoration: underline;
+}
+
+/* Headings */
+h2 {
+    color: var(--vscode-editor-foreground);
+    font-size: 1.5em; /* Adjust as needed */
+    margin-bottom: 1em;
+    border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-focusBorder));
+    padding-bottom: 0.3em;
+}
+
+
+/* Buttons */
+button {
+	border: 1px solid var(--vscode-button-border, transparent);
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	padding: 4px 12px;
+	cursor: pointer;
+	font-size: var(--vscode-font-size);
+    border-radius: 2px; /* Slight rounding */
+}
+
+button:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+button:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 2px;
+}
+
+button:disabled {
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-disabledForeground);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+
+/* Input fields */
+input[type="text"],
+input[type="number"],
+input[type="password"],
+textarea,
+select {
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-input-border, var(--vscode-focusBorder));
+	padding: 4px 8px; /* Consistent padding */
+    border-radius: 2px;
+    width: 100%; /* Make inputs fill container by default */
+    box-sizing: border-box; /* Include padding and border in width */
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+textarea:focus,
+select:focus {
+	border-color: var(--vscode-focusBorder);
+    outline: none; /* Remove default outline */
+}
+
+input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+/* Checkboxes */
+input[type="checkbox"] {
+    margin-right: 5px;
+    vertical-align: middle; /* Align checkbox with label */
+}
+
+label {
+    vertical-align: middle;
+}
+
+/* Basic message styles */
+.error-message {
+    color: var(--vscode-errorForeground);
+    margin-top: 5px;
+}
+
+.info-message {
+    color: var(--vscode-descriptionForeground);
+     margin-top: 5px;
+}
+
+/* Basic Layout for setting items */
+.setting-item {
+    margin-bottom: 15px;
+}
+
+.setting-item label:first-of-type { /* Style the main label for the setting item */
+    display: block;
+    margin-bottom: 8px; /* Increased space below main label */
+    font-weight: bold; /* Make top-level labels bold */
+}
+
+/* Use flexbox for input + button */
+.input-group {
+    display: flex;
+    align-items: center;
+}
+
+.input-group input[type="text"] {
+    flex-grow: 1; /* Input takes available space */
+    margin-right: 5px; /* Space before button */
+    /* Reset width if needed, as default is 100% */
+    width: auto;
+}
+
+.input-group button {
+    flex-shrink: 0; /* Prevent button from shrinking */
+     width: auto; /* Let button size itself */
+     padding: 4px 8px; /* Adjust padding for browse button */
+}
+
+/* Checkbox group layout */
+.checkbox-group div {
+    margin-bottom: 5px; /* Space between checkbox lines */
+    padding-left: 10px; /* Indent checkboxes slightly */
+}
+
+.checkbox-group label {
+    font-weight: normal; /* Normal weight for checkbox labels */
+     display: inline; /* Keep label next to checkbox */
+     margin-bottom: 0;
+}
+
+/* Button group layout */
+.button-group {
+    margin-top: 25px; /* Increased space before buttons */
+    border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-focusBorder));
+    padding-top: 15px;
+    display: flex;
+    justify-content: flex-end; /* Align buttons to the right */
+}
+
+.button-group button {
+    margin-left: 10px; /* Space between buttons */
+}

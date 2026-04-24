@@ -1,0 +1,23 @@
+export { registerInitCommand } from './setup/initProject';
+export { registerRunCommand } from './run/runProject';
+export { registerStopCommand } from './run/stopProject';
+export { registerConnectCommand } from './device/connectDevice';
+export { registerSyncFilesCommand } from './sync/syncFiles';
+export { registerNodeAidCommand } from './setup/openNodeAid';
+export { registerSetAdbPathCommand } from './setup/setAdbPath';
+export { registerSettingsCommand } from './settings/openSettings';
+export { registerCompileArm64Command } from './run/compileArm64';
+export { registerCompileAmd64Command } from './run/compileAmd64';
+export { registerCompileAmdCommand } from './run/compileAmd';
+export { registerCompileApkCommand } from './run/compileApk';
+export { registerShowAgHelpCommand } from './setup/showAgHelp';
+export { registerPushFileCommand } from './sync/pushFile';
+export { registerPushFolderCommand } from './sync/pushFolder';
+export { registerPushCommand } from './sync/pushProject';
+export { registerRunCustomCommandCommand } from './run/runCustomCommand';
+export { registerRunCustomFileCommand } from './run/runCustomFile';
+export { registerRunCustomUrlCommand } from './run/runCustomUrl';
+export { registerQuickDebugMainGoCommand } from './run/quickDebugMainGo';
+export { registerUpdateAutoGoCommand } from './setup/updateAutoGo';
+export { registerToggleLogViewLocationCommand } from './logs/toggleLogViewLocation';
+

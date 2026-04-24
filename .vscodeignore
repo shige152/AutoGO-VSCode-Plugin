@@ -1,0 +1,67 @@
+# ====================================
+# AutoGO VSCode插件 - 打包排除配置
+# ====================================
+
+# ===== 开发环境文件 =====
+.vscode/**
+.vscode-test/**
+.git/**
+.github/**
+.idea/**
+.cursor/**
+.trae/**
+SECURITY.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+iOS调试协议文档.md
+.gitattributes
+
+# ===== 源代码文件 =====
+# 排除TypeScript源码和映射文件
+**/*.ts
+**/*.map
+src/**
+out/**
+
+# 保留编译后的JavaScript输出
+!dist/**/*.js
+
+# ===== 配置和构建文件 =====
+.gitignore
+.yarnrc
+.yarn/**
+**/tsconfig.json
+**/.eslintrc.json
+webpack.config.js
+**/jest.config.js
+*.bat
+*.sh
+scripts/**
+BUILD-MULTIPLATFORM.md
+
+# ===== 依赖和临时文件 =====
+node_modules/**
+backup/**
+temp/**
+**/temp/**
+**/tmp/**
+**/.DS_Store
+*.log
+package-lock.json
+CheckUpdate.java
+
+# ===== 测试文件 =====
+**/test/**
+src/**/test/**
+src/**/*.test.ts
+
+# ===== 资源文件策略 =====
+# 排除根目录资源文件夹（使用 dist 中的静态资源）
+svg/**
+
+# 注意：dist/svg/ 会被自动包含
+# additional excludes
+coverage/**
+.vscode-test/**
+src/webview-ui/**/dist/**
+src/webview-ui/**/output/**

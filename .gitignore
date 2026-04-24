@@ -1,0 +1,46 @@
+# 依赖目录
+node_modules/
+
+# 构建与测试产物
+dist/
+out/
+coverage/
+.vscode-test/
+*.vsix
+
+# 日志文件
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 编辑器与本地配置
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/
+.idea/
+.cursor/
+.roo/
+
+# 环境变量与本地覆盖
+.env
+.env.*
+*.local
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+**/temp/
+**/tmp/
+
+# 备份与记忆文件
+backup/
+memory.jsonl
+working_memory.json
+
+# 前端产物
+src/webview-ui/**/dist/
+src/webview-ui/**/output/
