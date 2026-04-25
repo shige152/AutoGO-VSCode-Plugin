@@ -40,6 +40,28 @@ export class LogWebviewMessageHandler implements vscode.Disposable {
         }
     }
 
+    private ensureDebCompileOption(htmlContent: string): string {
+        if (htmlContent.includes('AutoGo.compileDEB')) {
+            return htmlContent;
+        }
+
+        const debButtonHtml = [
+            '                    <button class="dropdown-item ios-item" data-command="AutoGo.compileDEB">',
+            '                        <span class="codicon codicon-package menu-icon" aria-hidden="true"></span>',
+            '                        DEB 安装包',
+            '                    </button>',
+        ].join('\n');
+
+        const compileMenuEndMarker = [
+            '                </div>',
+            '            </div>',
+            '',
+            '            <div class="dropdown-container">',
+        ].join('\n');
+
+        return htmlContent.replace(compileMenuEndMarker, `${debButtonHtml}\n${compileMenuEndMarker}`);
+    }
+
     /**
      * Generates the HTML content for the webview.
      * @param webview The webview instance.
@@ -88,6 +110,7 @@ export class LogWebviewMessageHandler implements vscode.Disposable {
                 htmlPageContent = htmlPageContent.replace(/\${styleUri}/g, styleUri.toString());
                 htmlPageContent = htmlPageContent.replace(/\${codiconUri}/g, codiconUri.toString());
                 htmlPageContent = htmlPageContent.replace(/\${scriptUri}/g, scriptUri.toString());
+                htmlPageContent = this.ensureDebCompileOption(htmlPageContent);
                 
                 this.debugLog(`[LogWebviewMessageHandler] HTML content processed and placeholders replaced.`);
                 

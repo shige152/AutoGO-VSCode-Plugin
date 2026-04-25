@@ -6,6 +6,11 @@ import { ConfigService, CONFIG_SECTION } from '../../../services/configService';
 import { OutputChannel } from '../../../services/outputChannel';
 import { UpdateAutoGoService, VersionInfo } from './updateAutoGoService';
 import { executeCommand, handleProcessOutput, LogLevel } from '../../../utils/processUtils';
+import {
+  USER_MESSAGES,
+  formatDeviceConnectionCheckFailed,
+  formatDeviceNotConnected,
+} from '../../../utils/userMessages';
 import { ensureLogViewVisible } from '../../views/logViewVisibility';
 import { SettingsPanel } from '../../views/SettingsPanel';
 import { checkDeviceConnection } from '../shared/deviceConnection';
@@ -15,6 +20,8 @@ import { registerSetAdbPathCommand } from './setAdbPath';
 import { registerShowAgHelpCommand } from './showAgHelp';
 import { registerUpdateAutoGoCommand } from './updateAutoGo';
 import { registerSettingsCommand } from '../settings/openSettings';
+import { iosConnectionManager } from '../../../infra/ios/connectionManager';
+import { DEFAULT_IOS_HTTP_PORT } from '../../../infra/ios/protocol/messageTypes';
 
 export interface SetupCommandDeps {
   context: vscode.ExtensionContext;
@@ -32,6 +39,14 @@ async function showVersionPicker(
   localVersion: string | null,
 ): Promise<string | undefined> {
   type VersionPickItem = vscode.QuickPickItem & { rawVersion: string };
+  const formatVersionChanges = (changes: string[]): string => {
+    if (changes.length === 0) {
+      return '暂无更新说明';
+    }
+
+    const normalizedChanges = changes.map((change) => `• ${change.replace(/^\s*[-*]\s*/, '').trim()}`);
+    return normalizedChanges[0];
+  };
 
   const items: VersionPickItem[] = versions.map((version) => {
     const isCurrent = localVersion && version.version === localVersion;
@@ -48,12 +63,10 @@ async function showVersionPicker(
       description += '  $(check) 当前版本';
     }
 
-    const changesText = version.changes.join('; ');
-
     return {
       label,
       description,
-      detail: changesText.length > 100 ? `${changesText.slice(0, 100)}...` : changesText,
+      detail: formatVersionChanges(version.changes),
       rawVersion: version.version,
     };
   });
@@ -64,6 +77,16 @@ async function showVersionPicker(
   });
 
   return selected?.rawVersion;
+}
+
+function isLikelyIosDeviceHost(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+  return ipPattern.test(trimmed);
 }
 
 export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable[] {
@@ -79,13 +102,29 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
   } = deps;
 
   const updateAutoGo = new UpdateAutoGoService(outputChannel, configService);
+  const iosDeviceStateKey = 'autogo.selectedIosDevice';
+  const logActionState = (
+    action: string,
+    state: 'start' | 'success' | 'failure'
+  ): void => {
+    if (state === 'start') {
+      outputChannel.success(`开始${action}`);
+      return;
+    }
+
+    if (state === 'success') {
+      outputChannel.success(`${action}结束`);
+      return;
+    }
+
+    outputChannel.error(`${action}失败`);
+  };
 
   const disposables: vscode.Disposable[] = [];
 
   disposables.push(
     registerInitCommand(async () => {
       ensureLogViewVisible(context, getLogViewPreference());
-      outputChannel.success('开始初始化项目');
       const agPath = getAgPath();
       if (!agPath) {
         return;
@@ -94,7 +133,7 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
 
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders || workspaceFolders.length === 0) {
-        outputChannel.error('未找到工作区，无法确定项目根目录。');
+        outputChannel.error(USER_MESSAGES.workspaceNotFound);
         return;
       }
       const cwd = workspaceFolders[0].uri.fsPath;
@@ -111,11 +150,11 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
       );
 
       if (!platform) {
-        outputChannel.error('用户取消了初始化');
         return;
       }
 
       await vscode.workspace.getConfiguration(CONFIG_SECTION).update('targetPlatform', platform.value, vscode.ConfigurationTarget.Workspace);
+      logActionState('初始化', 'start');
 
       try {
         const result = await executeCommand(
@@ -130,19 +169,22 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
           }
         );
 
-        outputChannel.success(`初始化完成（${platform.label} 平台）`);
-
         if (!result.success) {
-          outputChannel.error('初始化命令执行失败。请查看上面的日志获取详细信息。');
+          logActionState('初始化', 'failure');
+          return;
         }
+
+        logActionState('初始化', 'success');
       } catch (error) {
-        const errorMsg = `执行初始化命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-        outputChannel.error(errorMsg);
+        logActionState('初始化', 'failure');
+        if (debugMode) {
+          const errorMsg = `执行初始化命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+          outputChannel.error(errorMsg);
+        }
       }
     }),
     registerShowAgHelpCommand(async () => {
       ensureLogViewVisible(context, getLogViewPreference());
-      outputChannel.success('获取 AutoGo 帮助信息...');
       const agPath = getAgPath();
       if (!agPath) {
         return;
@@ -161,8 +203,11 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
           minLogLevel: LogLevel.INFO,
         });
       } catch (error) {
-        const errorMsg = `执行帮助命令时发生异常: ${error instanceof Error ? error.message : String(error)}`;
-        outputChannel.error(errorMsg);
+        outputChannel.error(USER_MESSAGES.helpFetchFailed);
+        if (debugMode) {
+          const errorMsg = `执行帮助命令时发生异常: ${error instanceof Error ? error.message : String(error)}`;
+          outputChannel.error(errorMsg);
+        }
       }
     }),
     registerSettingsCommand(() => {
@@ -199,7 +244,6 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
 
         const selectedVersion = await showVersionPicker(versions, localVersion);
         if (!selectedVersion) {
-          outputChannel.success('用户取消了更新');
           return;
         }
 
@@ -218,8 +262,52 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
     }),
     registerNodeAidCommand(async () => {
       ensureLogViewVisible(context, getLogViewPreference());
-      outputChannel.success('启动节点助手服务...');
       const debugMode = configService.debugMode;
+
+      if (configService.targetPlatform === 'ios') {
+        let selectedHost = context.globalState.get<string>(iosDeviceStateKey, '').trim() || configService.selectedDevice.trim();
+        if (!isLikelyIosDeviceHost(selectedHost)) {
+          selectedHost = '';
+        }
+
+        if (!selectedHost) {
+          const devices = iosConnectionManager.getAllDevices();
+          if (devices.length > 0) {
+            const selected = await vscode.window.showQuickPick(
+              devices.map((device) => ({
+                label: device.id,
+                description: `连接于 ${device.connectedAt.toLocaleString()}`,
+                host: device.id,
+              })),
+              { placeHolder: '选择要打开节点助手的 iOS 设备' }
+            );
+
+            if (!selected) {
+              return;
+            }
+
+            selectedHost = selected.host;
+          }
+        }
+
+        if (!selectedHost) {
+          const message = USER_MESSAGES.noIosDeviceConnected;
+          outputChannel.error(message);
+          return;
+        }
+
+        if (selectedHost !== context.globalState.get<string>(iosDeviceStateKey, '').trim()) {
+          await context.globalState.update(iosDeviceStateKey, selectedHost);
+          if (debugMode) {
+            outputChannel.log(`状态已更新: ${iosDeviceStateKey} = ${selectedHost}`);
+          }
+        }
+
+        const nodeaidUrl = `http://${selectedHost}:${DEFAULT_IOS_HTTP_PORT}/node`;
+        outputChannel.success(`打开节点助手: ${nodeaidUrl}`);
+        await vscode.env.openExternal(vscode.Uri.parse(nodeaidUrl));
+        return;
+      }
 
       const agPath = getAgPath();
       if (!agPath) {
@@ -229,13 +317,8 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
       const selectedDevice = configService.selectedDevice;
 
       if (!selectedDevice) {
-        const message = '未选择设备，请先连接设备。';
+        const message = USER_MESSAGES.deviceNotSelected;
         outputChannel.error(message);
-        const connectOption = '连接设备';
-        const result = await vscode.window.showErrorMessage(message, connectOption);
-        if (result === connectOption) {
-          vscode.commands.executeCommand('AutoGo.connect');
-        }
         return;
       }
 
@@ -243,14 +326,9 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
       if (connectionStatus !== 'connected') {
         const message =
           connectionStatus === 'not_connected'
-            ? `设备 ${selectedDevice} 未连接，请先连接设备。`
-            : `检查设备 ${selectedDevice} 连接状态失败。`;
+            ? formatDeviceNotConnected(selectedDevice)
+            : formatDeviceConnectionCheckFailed(selectedDevice);
         outputChannel.error(message);
-        const connectOption = '连接设备';
-        const result = await vscode.window.showErrorMessage(message, connectOption);
-        if (result === connectOption) {
-          vscode.commands.executeCommand('AutoGo.connect');
-        }
         return;
       }
 
@@ -265,7 +343,7 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
           outputChannel.warn('未找到工作区，可能无法正确启动节点助手。');
         }
 
-        await executeCommand(
+        const result = await executeCommand(
           agPath,
           ['nodeserve'],
           outputChannel,
@@ -277,7 +355,12 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
           }
         );
 
-        outputChannel.success(`节点信息：${nodeaidUrl}`);
+        if (!result.success) {
+          outputChannel.error(USER_MESSAGES.nodeAssistantOpenFailed);
+          return;
+        }
+
+        outputChannel.success(`打开节点助手: ${nodeaidUrl}`);
         vscode.env.openExternal(vscode.Uri.parse(nodeaidUrl));
       } catch (error) {
         const errorMsg = `执行节点助手命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
@@ -291,16 +374,15 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
       });
 
       if (!adbPath) {
-        outputChannel.warn('未输入 ADB 路径。');
         return;
       }
 
       try {
         await vscode.workspace.getConfiguration(CONFIG_SECTION).update('adbPath', adbPath, vscode.ConfigurationTarget.Global);
-        outputChannel.success(`ADB 路径已设置为: ${adbPath}`);
+        outputChannel.success(`ADB 路径已设置: ${adbPath}`);
         SettingsPanel.postMessageToWebview({ command: 'adbPathUpdated', path: adbPath });
       } catch (error: any) {
-        outputChannel.error(`保存 ADB 路径失败: ${error.message}`);
+        outputChannel.error(`设置 ADB 路径失败: ${error.message}`);
       }
     }),
   );

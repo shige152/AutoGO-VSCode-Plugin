@@ -1,6 +1,13 @@
 # 更新日志
 此文件记录 AutoGo-Plugin 的所有显著更改。
 
+## AutoGo-Plugin `[1.2.13]` - 2026-04-25
+- 新增 iOS `deb` 编译选项。
+- 新增 代码混淆 配置。
+- 新增 iOS 节点助手。
+- 优化运行、调试、连接、推送、同步等日志输出，减少弹窗并统一提示文案。
+- 修复设置面板样式、更新记录展示问题。
+
 ## AutoGo-Plugin `[1.2.12]` - 2026-03-25
 - 插件移除 MCP 服务器相关功能，包括命令、配置项和 UI 元素。
 - MCP 服务器相关功能已独立到 [https://www.npmjs.com/package/autogo-mcp](https://www.npmjs.com/package/autogo-mcp)

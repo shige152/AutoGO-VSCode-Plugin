@@ -9,6 +9,11 @@ import { ConfigService, CONFIG_SECTION } from '../../../services/configService';
 import { NdkDownloadDeps } from '../../../services/environmentSetupService';
 import { OutputChannel } from '../../../services/outputChannel';
 import { executeCommand } from '../../../utils/processUtils';
+import {
+    USER_MESSAGES,
+    formatArtifactNotFound,
+    formatDeviceNotConnected,
+} from '../../../utils/userMessages';
 import { ensureLogViewVisible } from '../../views/logViewVisibility';
 import { checkDeviceConnection } from '../shared/deviceConnection';
 import { resolveAdbPathForCommand } from '../../adbPathResolver';
@@ -17,6 +22,8 @@ import { registerCompileAmd64Command } from './compileAmd64';
 import { registerCompileAmdCommand } from './compileAmd';
 import { registerCompileApkCommand } from './compileApk';
 import { registerCompileArm64Command } from './compileArm64';
+import { buildAgBuildArgs } from './buildCommandArgs';
+import { registerCompileDEBCommand } from './compileDeb';
 import { registerCompileIOSCommand } from './compileIos';
 import { registerCompileIPACommand } from './compileIpa';
 import { registerQuickDebugMainGoCommand } from './quickDebugMainGo';
@@ -50,6 +57,76 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
     } = deps;
 
     const disposables: vscode.Disposable[] = [];
+    const iosDeviceStateKey = 'autogo.selectedIosDevice';
+    const logIosFlow = (
+        message: string,
+        level: 'log' | 'success' | 'warn' | 'error' = 'log'
+    ): void => {
+        switch (level) {
+            case 'success':
+                outputChannel.success(message);
+                break;
+            case 'warn':
+                outputChannel.warn(message);
+                break;
+            case 'error':
+                outputChannel.error(message);
+                break;
+            default:
+                outputChannel.log(message);
+                break;
+        }
+    };
+    const logActionState = (
+        action: '运行' | '调试' | '停止',
+        state: 'start' | 'success' | 'failure'
+    ): void => {
+        if (state === 'start') {
+            outputChannel.success(`开始${action}`);
+            return;
+        }
+
+        if (state === 'success') {
+            outputChannel.success(`${action}结束`);
+            return;
+        }
+
+        outputChannel.error(`${action}失败`);
+    };
+
+    const selectIosDevice = async (
+        placeHolder: string
+    ): Promise<string | null> => {
+        const devices = iosConnectionManager.getAllDevices();
+        if (devices.length === 0) {
+            logIosFlow(USER_MESSAGES.noIosDeviceConnected, 'warn');
+            return null;
+        }
+
+        const preferredHost = context.globalState.get<string>(iosDeviceStateKey, '').trim() || configService.selectedDevice.trim();
+        if (preferredHost) {
+            const matchedDevice = devices.find((device) => device.id === preferredHost);
+            if (matchedDevice) {
+                return matchedDevice.id;
+            }
+        }
+
+        const selected = await vscode.window.showQuickPick(
+            devices.map((d) => ({
+                label: d.id,
+                description: `连接于 ${d.connectedAt.toLocaleString()}`,
+                host: d.id,
+            })),
+            { placeHolder }
+        );
+
+        if (!selected) {
+            return null;
+        }
+
+        await context.globalState.update(iosDeviceStateKey, selected.host);
+        return selected.host;
+    };
 
     disposables.push(
         registerRunCommand(async (...args) => {
@@ -62,7 +139,7 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
             }
 
             // Android 平台使用原有逻辑
-            outputChannel.success('开始运行');
+            logActionState('运行', 'start');
             const agPath = getAgPath();
             if (!agPath) return;
             const debugMode = configService.debugMode;
@@ -75,13 +152,8 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
             }
 
             if (!targetDevice) {
-                const message = '未选择设备，请先连接设备';
+                const message = USER_MESSAGES.deviceNotSelected;
                 outputChannel.error(message);
-                const connectOption = '连接设备';
-                const result = await vscode.window.showErrorMessage(message, connectOption);
-                if (result === connectOption) {
-                    vscode.commands.executeCommand('AutoGo.connect');
-                }
                 return;
             }
 
@@ -92,13 +164,8 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                 }
 
                 if (!devices.includes(targetDevice)) {
-                    const message = `设备 ${targetDevice} 未连接，请先连接设备`;
+                    const message = formatDeviceNotConnected(targetDevice);
                     outputChannel.error(message);
-                    const connectOption = '连接设备';
-                    const result = await vscode.window.showErrorMessage(message, connectOption);
-                    if (result === connectOption) {
-                        vscode.commands.executeCommand('AutoGo.connect');
-                    }
                     return;
                 }
             } catch (error) {
@@ -116,7 +183,7 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
 
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders || workspaceFolders.length === 0) {
-                outputChannel.error('未找到工作区，无法确定项目根目录。');
+                outputChannel.error(USER_MESSAGES.workspaceNotFound);
                 return;
             }
             const cwd = workspaceFolders[0].uri.fsPath;
@@ -140,71 +207,51 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                     }
                 );
 
-                outputChannel.success('运行结束');
-
                 if (!result.success) {
-                    outputChannel.error('运行命令执行失败。请查看上面的日志获取详细信息。');
-                }
-            } catch (error) {
-                const errorMsg = `执行运行命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-                outputChannel.error(errorMsg);
-            }
-
-            async function runOnIosDevice(): Promise<void> {
-                // 检查是否有已连接的 iOS 设备
-                const devices = iosConnectionManager.getAllDevices();
-                if (devices.length === 0) {
-                    const result = await vscode.window.showWarningMessage(
-                        '没有已连接的 iOS 设备，是否先连接设备？',
-                        '连接设备',
-                        '取消'
-                    );
-                    if (result === '连接设备') {
-                        await vscode.commands.executeCommand('AutoGo.connect');
-                    }
+                    logActionState('运行', 'failure');
                     return;
                 }
 
-                // 选择设备（如果有多个）
-                let selectedHost: string;
-                if (devices.length === 1) {
-                    selectedHost = devices[0].id;
-                } else {
-                    const selected = await vscode.window.showQuickPick(
-                        devices.map((d) => ({
-                            label: d.id,
-                            description: `连接于 ${d.connectedAt.toLocaleString()}`,
-                            host: d.id,
-                        })),
-                        { placeHolder: '选择要运行的 iOS 设备' }
-                    );
-                    if (!selected) {
-                        return;
-                    }
-                    selectedHost = selected.host;
+                logActionState('运行', 'success');
+            } catch (error) {
+                logActionState('运行', 'failure');
+                if (debugMode) {
+                    const errorMsg = `执行运行命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+                    outputChannel.error(errorMsg);
+                }
+            }
+
+            async function runOnIosDevice(): Promise<void> {
+                const selectedHost = await selectIosDevice('选择要运行的 iOS 设备');
+                if (!selectedHost) {
+                    return;
                 }
 
-                // 执行编译
-                await vscode.window.withProgress(
+                logActionState('运行', 'start');
+                const compileSucceeded = await compileBuildTarget(
                     {
-                        location: vscode.ProgressLocation.Notification,
-                        title: '正在编译 iOS 项目...',
-                        cancellable: false,
+                        context,
+                        outputChannel,
+                        configService,
+                        getAgPath,
+                        getLogViewPreference,
                     },
-                    async () => {
-                        try {
-                            await vscode.commands.executeCommand('AutoGo.compileIOS');
-                        } catch (error) {
-                            vscode.window.showErrorMessage('编译 iOS 项目失败');
-                            throw error;
-                        }
+                    {
+                        target: 'ios',
+                        commandDisplayName: 'iOS 二进制',
+                        failureMessage: 'iOS 二进制命令执行失败。请查看上面的日志获取详细信息。',
+                        unexpectedErrorPrefix: '执行 iOS 二进制命令时发生未预料的异常',
                     }
                 );
+                if (!compileSucceeded) {
+                    logActionState('运行', 'failure');
+                    return;
+                }
 
                 // 查找编译产物
                 const workspaceFolders = vscode.workspace.workspaceFolders;
                 if (!workspaceFolders) {
-                    vscode.window.showErrorMessage('没有打开的工作区');
+                    logIosFlow(USER_MESSAGES.workspaceNotFound, 'error');
                     return;
                 }
 
@@ -214,29 +261,15 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                 // 二进制模式
                 const binaryPath = path.join(buildDir, 'ios-release');
                 if (!fs.existsSync(binaryPath)) {
-                    vscode.window.showErrorMessage(`找不到编译产物: ${binaryPath}`);
+                    logIosFlow(formatArtifactNotFound(binaryPath), 'error');
                     return;
                 }
 
-                const success = await vscode.window.withProgress(
-                    {
-                        location: vscode.ProgressLocation.Notification,
-                        title: `正在部署到 iOS 设备 ${selectedHost}...`,
-                        cancellable: true,
-                    },
-                    async (progress, token) => {
-                        token.onCancellationRequested(() => {
-                            iosDebugService.stopScript(selectedHost);
-                        });
-
-                        return await iosDebugService.runBinary(selectedHost, binaryPath);
-                    }
-                );
-
+                const success = await iosDebugService.runBinary(selectedHost, binaryPath);
                 if (success) {
-                    vscode.window.showInformationMessage('iOS 二进制运行已启动');
+                    logActionState('运行', 'success');
                 } else {
-                    vscode.window.showErrorMessage('iOS 二进制运行启动失败');
+                    logActionState('运行', 'failure');
                 }
             }
         }),
@@ -250,7 +283,7 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
             }
 
             // Android 平台使用原有逻辑
-            outputChannel.success('停止运行');
+            logActionState('停止', 'start');
             const agPath = getAgPath();
             if (!agPath) return;
             const debugMode = configService.debugMode;
@@ -310,41 +343,36 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                 );
 
                 if (!result.success) {
-                    outputChannel.error('停止命令执行失败。请查看上面的日志获取详细信息。');
-                }
-            } catch (error) {
-                const errorMsg = `执行停止命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-                outputChannel.error(errorMsg);
-            }
-
-            async function stopIosDevice(): Promise<void> {
-                const devices = iosConnectionManager.getAllDevices();
-                if (devices.length === 0) {
-                    vscode.window.showWarningMessage('没有已连接的 iOS 设备');
+                    logActionState('停止', 'failure');
                     return;
                 }
 
-                // 选择设备（如果有多个）
-                let selectedHost: string;
-                if (devices.length === 1) {
-                    selectedHost = devices[0].id;
-                } else {
-                    const selected = await vscode.window.showQuickPick(
-                        devices.map((d) => ({
-                            label: d.id,
-                            description: `连接于 ${d.connectedAt.toLocaleString()}`,
-                            host: d.id,
-                        })),
-                        { placeHolder: '选择要停止脚本的 iOS 设备' }
-                    );
-                    if (!selected) {
-                        return;
-                    }
-                    selectedHost = selected.host;
+                logActionState('停止', 'success');
+            } catch (error) {
+                logActionState('停止', 'failure');
+                if (debugMode) {
+                    const errorMsg = `执行停止命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+                    outputChannel.error(errorMsg);
+                }
+            }
+
+            async function stopIosDevice(): Promise<void> {
+                const selectedHost = await selectIosDevice('选择要停止脚本的 iOS 设备');
+                if (!selectedHost) {
+                    return;
                 }
 
-                iosDebugService.stopScript(selectedHost);
-                vscode.window.showInformationMessage(`已向 iOS 设备 ${selectedHost} 发送停止命令`);
+                try {
+                    logActionState('停止', 'start');
+                    iosDebugService.stopScript(selectedHost);
+                    logActionState('停止', 'success');
+                } catch (error) {
+                    logActionState('停止', 'failure');
+                    if (configService.debugMode) {
+                        const errorMsg = `执行停止命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+                        outputChannel.error(errorMsg);
+                    }
+                }
             }
         }),
         registerQuickDebugMainGoCommand(async (...args) => {
@@ -357,7 +385,7 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
             }
 
             // Android 平台使用原有逻辑
-            outputChannel.success('开始调试');
+            logActionState('调试', 'start');
             const agPath = getAgPath();
             if (!agPath) {
                 return;
@@ -378,13 +406,8 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                     await vscode.workspace.getConfiguration(CONFIG_SECTION).update('selectedDevice', targetDevice, vscode.ConfigurationTarget.Global);
                     outputChannel.success(`已选择设备: ${targetDevice}`);
                 } else {
-                    const message = '未选择设备，请先连接设备';
+                    const message = USER_MESSAGES.deviceNotSelected;
                     outputChannel.error(message);
-                    const connectOption = '连接设备';
-                    const result = await vscode.window.showErrorMessage(message, connectOption);
-                    if (result === connectOption) {
-                        vscode.commands.executeCommand('AutoGo.connect');
-                    }
                     return;
                 }
             }
@@ -396,19 +419,14 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                 configService
             );
             if (connectionStatus !== 'connected') {
-                const message = `设备 ${targetDevice} 未连接，请先连接设备`;
+                const message = formatDeviceNotConnected(targetDevice);
                 outputChannel.error(message);
-                const connectOption = '连接设备';
-                const result = await vscode.window.showErrorMessage(message, connectOption);
-                if (result === connectOption) {
-                    vscode.commands.executeCommand('AutoGo.connect');
-                }
                 return;
             }
 
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders || workspaceFolders.length === 0) {
-                outputChannel.error('未找到工作区，无法确定项目根目录。');
+                outputChannel.error(USER_MESSAGES.workspaceNotFound);
                 return;
             }
             const cwd = workspaceFolders[0].uri.fsPath;
@@ -429,54 +447,32 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                     }
                 );
 
-                outputChannel.success('调试结束');
-
                 if (!result.success) {
-                    outputChannel.error('快速调试命令执行失败。请查看上面的日志获取详细信息。');
-                }
-            } catch (error) {
-                const errorMsg = `执行快速调试命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-                outputChannel.error(errorMsg);
-            }
-
-            async function quickDebugOnIos(): Promise<void> {
-                // 检查是否有已连接的 iOS 设备
-                const devices = iosConnectionManager.getAllDevices();
-                if (devices.length === 0) {
-                    const result = await vscode.window.showWarningMessage(
-                        '没有已连接的 iOS 设备，是否先连接设备？',
-                        '连接设备',
-                        '取消'
-                    );
-                    if (result === '连接设备') {
-                        await vscode.commands.executeCommand('AutoGo.connect');
-                    }
+                    logActionState('调试', 'failure');
                     return;
                 }
 
-                // 选择设备（如果有多个）
-                let selectedHost: string;
-                if (devices.length === 1) {
-                    selectedHost = devices[0].id;
-                } else {
-                    const selected = await vscode.window.showQuickPick(
-                        devices.map((d) => ({
-                            label: d.id,
-                            description: `连接于 ${d.connectedAt.toLocaleString()}`,
-                            host: d.id,
-                        })),
-                        { placeHolder: '选择要调试的 iOS 设备' }
-                    );
-                    if (!selected) {
-                        return;
-                    }
-                    selectedHost = selected.host;
+                logActionState('调试', 'success');
+            } catch (error) {
+                logActionState('调试', 'failure');
+                if (debugMode) {
+                    const errorMsg = `执行快速调试命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+                    outputChannel.error(errorMsg);
                 }
+            }
+
+            async function quickDebugOnIos(): Promise<void> {
+                const selectedHost = await selectIosDevice('选择要调试的 iOS 设备');
+                if (!selectedHost) {
+                    return;
+                }
+
+                logActionState('调试', 'start');
 
                 // 执行打包（AG run -t ios 生成 ios-debug.zip）
                 const workspaceFolders = vscode.workspace.workspaceFolders;
                 if (!workspaceFolders) {
-                    vscode.window.showErrorMessage('没有打开的工作区');
+                    logIosFlow(USER_MESSAGES.workspaceNotFound, 'error');
                     return;
                 }
                 const cwd = workspaceFolders[0].uri.fsPath;
@@ -488,62 +484,39 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
                     fs.unlinkSync(zipPath);
                 }
 
-                await vscode.window.withProgress(
-                    {
-                        location: vscode.ProgressLocation.Notification,
-                        title: '正在打包 iOS 项目...',
-                        cancellable: false,
-                    },
-                    async () => {
-                        const agPath = getAgPath();
-                        if (!agPath) {
-                            throw new Error('未找到 AG 可执行文件');
-                        }
-
-                        const result = await executeCommand(
-                            agPath,
-                            ['run', '-t', 'ios'],
-                            outputChannel,
-                            {
-                                cwd: cwd,
-                                debugMode: configService.debugMode,
-                                commandDisplayName: 'iOS 打包',
-                                timeout: 0,
-                                configService: configService,
-                            }
-                        );
-
-                        if (!result.success) {
-                            throw new Error('打包 iOS 项目失败');
-                        }
-                    }
-                );
-
-                if (!fs.existsSync(zipPath)) {
-                    vscode.window.showErrorMessage(`找不到打包产物: ${zipPath}`);
+                const agPath = getAgPath();
+                if (!agPath) {
                     return;
                 }
 
-                // 执行快速调试
-                const success = await vscode.window.withProgress(
+                const result = await executeCommand(
+                    agPath,
+                    ['run', '-t', 'ios'],
+                    outputChannel,
                     {
-                        location: vscode.ProgressLocation.Notification,
-                        title: `正在部署到 iOS 设备 ${selectedHost}...`,
-                        cancellable: true,
-                    },
-                    async (progress, token) => {
-                        token.onCancellationRequested(() => {
-                            iosDebugService.stopScript(selectedHost);
-                        });
-
-                        return await iosDebugService.quickDebug(selectedHost, zipPath);
+                        cwd: cwd,
+                        debugMode: configService.debugMode,
+                        commandDisplayName: 'iOS 打包',
+                        timeout: 0,
+                        configService: configService,
                     }
                 );
 
+                if (!result.success) {
+                    logActionState('调试', 'failure');
+                    return;
+                }
+
+                if (!fs.existsSync(zipPath)) {
+                    logIosFlow(formatArtifactNotFound(zipPath), 'error');
+                    return;
+                }
+
+                const success = await iosDebugService.quickDebug(selectedHost, zipPath);
                 if (success) {
-                    vscode.window.showInformationMessage('iOS 快速调试已启动');
+                    logActionState('调试', 'success');
                 } else {
-                    vscode.window.showErrorMessage('iOS 快速调试启动失败');
+                    logActionState('调试', 'failure');
                 }
             }
         }),
@@ -598,6 +571,15 @@ export function registerRunCommands(deps: RunCommandDeps): vscode.Disposable[] {
         }),
         registerCompileIPACommand(async () => {
             await compileIPAProject({
+                context,
+                outputChannel,
+                configService,
+                getAgPath,
+                getLogViewPreference,
+            });
+        }),
+        registerCompileDEBCommand(async () => {
+            await compileDEBProject({
                 context,
                 outputChannel,
                 configService,
@@ -783,45 +765,44 @@ interface CompileProjectDeps {
     getLogViewPreference: () => 'Panel' | 'View' | 'None';
 }
 
-async function compileProject(abi: string, deps: CompileProjectDeps): Promise<void> {
-    const { context, outputChannel, configService, ndkDeps, getAgPath, getLogViewPreference } = deps;
+interface CompileBuildTargetOptions {
+    target: string;
+    startMessage?: string;
+    commandDisplayName: string;
+    failureMessage: string;
+    unexpectedErrorPrefix: string;
+    packso?: boolean;
+    apkArchitectures?: Record<string, boolean>;
+}
+
+async function compileBuildTarget(
+    deps: CompileIOSProjectDeps,
+    options: CompileBuildTargetOptions
+): Promise<boolean> {
+    const { context, outputChannel, configService, getAgPath, getLogViewPreference } = deps;
     ensureLogViewVisible(context, getLogViewPreference());
-    outputChannel.success(`开始编译项目为 ${abi} 架构...`);
-    const debugMode = configService.debugMode;
-
-    const agPath = getAgPath();
-    if (!agPath) return;
-
-    // 注意：AutoGo SDK 已内置 NDK 检查，执行编译命令时会自动检查并下载
-
-    const usePackso = configService.packso;
-
-    let buildCommandArg = abi;
-
-    if (abi === 'apk') {
-        const apkArchitectures = configService.apkArchitectures;
-
-        const selectedArchs = Object.entries(apkArchitectures)
-            .filter(([_, isSelected]) => isSelected)
-            .map(([arch]) => arch);
-
-        if (selectedArchs.length > 0) {
-            buildCommandArg = `apk[${selectedArchs.join(',')}]`;
-        }
+    if (options.startMessage) {
+        outputChannel.success(options.startMessage);
     }
+
+    const debugMode = configService.debugMode;
+    const agPath = getAgPath();
+    if (!agPath) return false;
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
-        outputChannel.error('未找到工作区，无法确定项目根目录。');
-        return;
+        outputChannel.error(USER_MESSAGES.workspaceNotFound);
+        return false;
     }
     const cwd = workspaceFolders[0].uri.fsPath;
 
     try {
-        const args = ['build', '-t', buildCommandArg];
-        if (usePackso) {
-            args.push('-e');
-        }
+        const args = buildAgBuildArgs({
+            target: options.target,
+            packso: options.packso,
+            codeObfuscation: configService.codeObfuscation,
+            apkArchitectures: options.apkArchitectures,
+        });
 
         const result = await executeCommand(
             agPath,
@@ -830,18 +811,37 @@ async function compileProject(abi: string, deps: CompileProjectDeps): Promise<vo
             {
                 cwd: cwd,
                 debugMode: debugMode,
-                commandDisplayName: `编译(${abi})`,
+                commandDisplayName: options.commandDisplayName,
                 configService: configService,
             }
         );
 
         if (!result.success) {
-            outputChannel.error(`编译(${abi}) 命令执行失败。请查看上面的日志获取详细信息。`);
+            outputChannel.error(options.failureMessage);
+            return false;
         }
+        return true;
     } catch (error) {
-        const errorMsg = `执行编译命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+        const errorMsg = `${options.unexpectedErrorPrefix}: ${error instanceof Error ? error.message : String(error)}`;
         outputChannel.error(errorMsg);
+        return false;
     }
+}
+
+async function compileProject(abi: string, deps: CompileProjectDeps): Promise<void> {
+    const { configService } = deps;
+
+    // AutoGo SDK handles NDK checks automatically when build commands run.
+
+    await compileBuildTarget(deps, {
+        target: abi,
+        startMessage: `开始编译项目为 ${abi} 架构...`,
+        commandDisplayName: `编译(${abi})`,
+        failureMessage: `编译(${abi}) 命令执行失败。请查看上面的日志获取详细信息。`,
+        unexpectedErrorPrefix: '执行编译命令时发生未预料的异常',
+        packso: configService.packso,
+        apkArchitectures: configService.apkArchitectures,
+    });
 }
 
 interface CompileIOSProjectDeps {
@@ -853,43 +853,13 @@ interface CompileIOSProjectDeps {
 }
 
 async function compileIOSProject(deps: CompileIOSProjectDeps): Promise<void> {
-    const { context, outputChannel, configService, getAgPath, getLogViewPreference } = deps;
-    ensureLogViewVisible(context, getLogViewPreference());
-    outputChannel.success('开始编译 iOS 项目...');
-    const debugMode = configService.debugMode;
-
-    const agPath = getAgPath();
-    if (!agPath) return;
-
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-        outputChannel.error('未找到工作区，无法确定项目根目录。');
-        return;
-    }
-    const cwd = workspaceFolders[0].uri.fsPath;
-
-    try {
-        const args = ['build', '-t', 'ios'];
-
-        const result = await executeCommand(
-            agPath,
-            args,
-            outputChannel,
-            {
-                cwd: cwd,
-                debugMode: debugMode,
-                commandDisplayName: 'iOS 二进制',
-                configService: configService,
-            }
-        );
-
-        if (!result.success) {
-            outputChannel.error('iOS 二进制命令执行失败。请查看上面的日志获取详细信息。');
-        }
-    } catch (error) {
-        const errorMsg = `执行 iOS 二进制命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-        outputChannel.error(errorMsg);
-    }
+    await compileBuildTarget(deps, {
+        target: 'ios',
+        startMessage: '开始编译 iOS 项目...',
+        commandDisplayName: 'iOS 二进制',
+        failureMessage: 'iOS 二进制命令执行失败。请查看上面的日志获取详细信息。',
+        unexpectedErrorPrefix: '执行 iOS 二进制命令时发生未预料的异常',
+    });
 }
 
 interface CompileIPAProjectDeps {
@@ -901,41 +871,21 @@ interface CompileIPAProjectDeps {
 }
 
 async function compileIPAProject(deps: CompileIPAProjectDeps): Promise<void> {
-    const { context, outputChannel, configService, getAgPath, getLogViewPreference } = deps;
-    ensureLogViewVisible(context, getLogViewPreference());
-    outputChannel.success('开始打包 IPA...');
-    const debugMode = configService.debugMode;
+    await compileBuildTarget(deps, {
+        target: 'ipa',
+        startMessage: '开始打包 IPA...',
+        commandDisplayName: 'IPA 安装包',
+        failureMessage: 'IPA 安装包命令执行失败。请查看上面的日志获取详细信息。',
+        unexpectedErrorPrefix: '执行 IPA 安装包命令时发生未预料的异常',
+    });
+}
 
-    const agPath = getAgPath();
-    if (!agPath) return;
-
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-        outputChannel.error('未找到工作区，无法确定项目根目录。');
-        return;
-    }
-    const cwd = workspaceFolders[0].uri.fsPath;
-
-    try {
-        const args = ['build', '-t', 'ipa'];
-
-        const result = await executeCommand(
-            agPath,
-            args,
-            outputChannel,
-            {
-                cwd: cwd,
-                debugMode: debugMode,
-                commandDisplayName: 'IPA 安装包',
-                configService: configService,
-            }
-        );
-
-        if (!result.success) {
-            outputChannel.error('IPA 安装包命令执行失败。请查看上面的日志获取详细信息。');
-        }
-    } catch (error) {
-        const errorMsg = `执行 IPA 安装包命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-        outputChannel.error(errorMsg);
-    }
+async function compileDEBProject(deps: CompileIPAProjectDeps): Promise<void> {
+    await compileBuildTarget(deps, {
+        target: 'deb',
+        startMessage: '开始打包 DEB...',
+        commandDisplayName: 'DEB 安装包',
+        failureMessage: 'DEB 安装包命令执行失败。请查看上面的日志获取详细信息。',
+        unexpectedErrorPrefix: '执行 DEB 安装包命令时发生未预料的异常',
+    });
 }

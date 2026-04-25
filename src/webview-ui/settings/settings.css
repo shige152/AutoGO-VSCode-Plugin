@@ -4,6 +4,11 @@
     --settings-card-bg: var(--vscode-editorWidget-background, var(--vscode-editor-background));
     --settings-border: var(--vscode-panel-border);
     --settings-text-muted: var(--vscode-descriptionForeground);
+    --settings-checkbox-size: 16px;
+    --settings-checkbox-background: var(--vscode-checkbox-background, var(--vscode-input-background));
+    --settings-checkbox-border: var(--vscode-checkbox-border, var(--vscode-input-border, var(--settings-border)));
+    --settings-checkbox-selected-background: var(--vscode-checkbox-selectBackground, var(--vscode-button-background));
+    --settings-checkbox-selected-foreground: var(--vscode-checkbox-foreground, var(--vscode-button-foreground));
 }
 
 body {
@@ -119,6 +124,10 @@ h2 {
     gap: 6px;
 }
 
+.setting-item--compact {
+    gap: 0;
+}
+
 .setting-item label {
     font-weight: 600;
     color: var(--vscode-foreground);
@@ -173,7 +182,66 @@ input[type="text"] {
 .checkbox-container {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    min-height: 22px;
+}
+
+.checkbox-container--compact {
+    gap: 10px;
+}
+
+.checkbox-container input[type="checkbox"],
+.checkbox-group input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+    width: var(--settings-checkbox-size);
+    height: var(--settings-checkbox-size);
+    flex: 0 0 var(--settings-checkbox-size);
+    display: inline-grid;
+    place-items: center;
+    box-sizing: border-box;
+    border: 1px solid var(--settings-checkbox-border);
+    border-radius: 4px;
+    background: var(--settings-checkbox-background);
+    cursor: pointer;
+}
+
+.checkbox-container input[type="checkbox"]::before,
+.checkbox-group input[type="checkbox"]::before {
+    content: "";
+    width: 8px;
+    height: 5px;
+    border-left: 2px solid var(--settings-checkbox-selected-foreground);
+    border-bottom: 2px solid var(--settings-checkbox-selected-foreground);
+    transform: translateY(-1px) rotate(-45deg) scale(0);
+    transform-origin: center;
+    transition: transform 120ms ease-in-out;
+}
+
+.checkbox-container input[type="checkbox"]:checked,
+.checkbox-group input[type="checkbox"]:checked {
+    border-color: var(--settings-checkbox-border);
+    background: var(--settings-checkbox-selected-background);
+}
+
+.checkbox-container input[type="checkbox"]:checked::before,
+.checkbox-group input[type="checkbox"]:checked::before {
+    transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+
+.checkbox-container input[type="checkbox"]:focus-visible,
+.checkbox-group input[type="checkbox"]:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 2px;
+}
+
+.setting-item .checkbox-container label,
+.setting-item .checkbox-group label {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.35;
+    margin: 0;
 }
 
 .checkbox-label {
@@ -181,16 +249,24 @@ input[type="text"] {
     color: var(--settings-text-muted);
 }
 
+.checkbox-label--primary {
+    color: var(--vscode-foreground);
+    font-weight: 600;
+}
+
 .checkbox-group {
     display: flex;
-    gap: 15px;
+    gap: 10px 18px;
     flex-wrap: wrap;
 }
 
 .checkbox-group > div {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 8px;
+    min-height: 22px;
+    margin-bottom: 0;
+    padding-left: 0;
 }
 
 .list-item {

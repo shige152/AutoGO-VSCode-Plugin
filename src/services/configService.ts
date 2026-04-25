@@ -61,6 +61,10 @@ export class ConfigService {
         return this.getConfig().get<boolean>('packso', false);
     }
 
+    get codeObfuscation(): boolean {
+        return this.getConfig().get<boolean>('codeObfuscation', false);
+    }
+
     get apkArchitectures(): ApkArchitectures {
         const defaultArchs: ApkArchitectures = {
             'arm64-v8a': true,
@@ -216,7 +220,7 @@ export class ConfigService {
         
         // Get all known configuration keys
         const keys = [
-            'debugMode', 'adbPath', 'selectedDevice', 'packso',
+            'debugMode', 'adbPath', 'selectedDevice', 'packso', 'codeObfuscation',
             'apkArchitectures', 'customCommands', 'customFiles', 'customUrls',
             'showLogTime', 'showContextMenu', 'targetPlatform',
             'sdkChangelogUrl', 'sdkDownloadBaseUrl'

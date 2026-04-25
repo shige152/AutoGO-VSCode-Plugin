@@ -20,6 +20,10 @@ export class VscodeSettings implements Settings {
     return this.configService.packso;
   }
 
+  get codeObfuscation(): boolean {
+    return this.configService.codeObfuscation;
+  }
+
   get apkArchitectures(): Record<string, boolean> {
     return this.configService.apkArchitectures;
   }
