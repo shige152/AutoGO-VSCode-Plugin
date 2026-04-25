@@ -265,13 +265,19 @@ export function registerSetupCommands(deps: SetupCommandDeps): vscode.Disposable
       const debugMode = configService.debugMode;
 
       if (configService.targetPlatform === 'ios') {
+        const devices = iosConnectionManager.getAllDevices();
         let selectedHost = context.globalState.get<string>(iosDeviceStateKey, '').trim() || configService.selectedDevice.trim();
         if (!isLikelyIosDeviceHost(selectedHost)) {
           selectedHost = '';
         }
+        if (selectedHost && !devices.some((device) => device.id === selectedHost)) {
+          if (debugMode) {
+            outputChannel.log(`已保存的 iOS 设备不可用，准备重新选择: ${selectedHost}`);
+          }
+          selectedHost = '';
+        }
 
         if (!selectedHost) {
-          const devices = iosConnectionManager.getAllDevices();
           if (devices.length > 0) {
             const selected = await vscode.window.showQuickPick(
               devices.map((device) => ({
