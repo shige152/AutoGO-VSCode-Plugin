@@ -3,10 +3,12 @@
  * 提供 iOS 设备调试的高级功能
  */
 
-import * as vscode from 'vscode';
 import * as fs from 'fs';
-import * as path from 'path';
 import { OutputChannel } from './outputChannel';
+import {
+  formatDeviceNotConnected,
+  formatFileNotFound,
+} from '../utils/userMessages';
 import {
   iosConnectionManager,
   IosConnectionManager,
@@ -30,12 +32,9 @@ export class IosDebugService {
    */
   async connectDevice(host: string, port: number = DEFAULT_IOS_DEBUG_PORT): Promise<boolean> {
     try {
-      this.outputChannel.log(`正在连接到 iOS 设备 ${host}:${port}...`);
-
       const config: IosDeviceConfig = { host, port };
       await this.connectionManager.connect(host, config);
 
-      this.outputChannel.log(`成功连接到 iOS 设备 ${host}`);
       return true;
     } catch (error: any) {
       this.outputChannel.error(`连接 iOS 设备失败: ${error.message}`);
@@ -43,12 +42,15 @@ export class IosDebugService {
     }
   }
 
+  private forwardDeviceLog(log: string): void {
+    this.outputChannel.appendRaw(log);
+  }
+
   /**
    * 断开 iOS 设备连接
    */
   async disconnectDevice(host: string): Promise<void> {
     await this.connectionManager.disconnect(host);
-    this.outputChannel.log(`已断开与 iOS 设备 ${host} 的连接`);
   }
 
   /**
@@ -71,23 +73,20 @@ export class IosDebugService {
   ): Promise<boolean> {
     const client = this.connectionManager.getClient(host);
     if (!client) {
-      this.outputChannel.error(`设备 ${host} 未连接`);
+      this.outputChannel.error(formatDeviceNotConnected(host));
       return false;
     }
 
     try {
       if (!fs.existsSync(localPath)) {
-        this.outputChannel.error(`本地文件不存在: ${localPath}`);
+        this.outputChannel.error(formatFileNotFound(localPath));
         return false;
       }
 
       const fileData = fs.readFileSync(localPath);
-      this.outputChannel.log(`正在推送文件 ${path.basename(localPath)} 到 ${remotePath}...`);
-
       const result = await client.pushFile(remotePath, fileData);
 
       if (result.success) {
-        this.outputChannel.log(`文件推送成功`);
         return true;
       } else {
         this.outputChannel.error(`文件推送失败: ${result.error}`);
@@ -126,7 +125,7 @@ export class IosDebugService {
   ): Promise<boolean> {
     const client = this.connectionManager.getClient(host);
     if (!client) {
-      this.outputChannel.error(`设备 ${host} 未连接`);
+      this.outputChannel.error(formatDeviceNotConnected(host));
       return false;
     }
 
@@ -143,11 +142,9 @@ export class IosDebugService {
     }
 
     try {
-      this.outputChannel.log(`正在启动脚本运行 (模式: ${mode})...`);
       const result = await client.runScript(mode);
 
       if (result.success) {
-        this.outputChannel.log(`脚本启动成功`);
         return true;
       } else {
         this.outputChannel.error(`脚本启动失败: ${result.error}`);
@@ -169,7 +166,6 @@ export class IosDebugService {
     }
 
     client.stopScript();
-    this.outputChannel.log(`已发送停止脚本命令`);
   }
 
   /**
@@ -188,10 +184,8 @@ export class IosDebugService {
     return await this.runScript(
       host,
       'zip',
-      (log) => this.outputChannel.log(log),
-      (exitCode) => {
-        this.outputChannel.log(`脚本已退出，退出码: ${exitCode}`);
-      }
+      (log) => this.forwardDeviceLog(log),
+      () => undefined
     );
   }
 
@@ -221,10 +215,8 @@ export class IosDebugService {
     return await this.runScript(
       host,
       'bin',
-      (log) => this.outputChannel.log(log),
-      (exitCode) => {
-        this.outputChannel.log(`二进制已退出，退出码: ${exitCode}`);
-      }
+      (log) => this.forwardDeviceLog(log),
+      () => undefined
     );
   }
 
@@ -233,6 +225,5 @@ export class IosDebugService {
    */
   async disconnectAll(): Promise<void> {
     await this.connectionManager.disconnectAll();
-    this.outputChannel.log('已断开所有 iOS 设备连接');
   }
 }

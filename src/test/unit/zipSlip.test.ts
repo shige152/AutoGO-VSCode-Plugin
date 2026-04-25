@@ -21,6 +21,6 @@ test('zipSlip rejects absolute paths', () => {
 });
 
 test('zipSlip rejects null bytes', () => {
-  const result = validateZipEntryPath('/tmp/target', 'bad\u0000path');
+  const result = validateZipEntryPath('/tmp/target', 'bad\0path');
   assert.equal(result.ok, false);
 });

@@ -119,6 +119,7 @@ function createSettings(overrides: Partial<Settings> = {}): Settings {
     debugMode: false,
     showLogTime: true,
     packso: false,
+    codeObfuscation: false,
     apkArchitectures: {},
     selectedDevice: '',
     customCommands: [],

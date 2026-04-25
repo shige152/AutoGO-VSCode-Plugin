@@ -81,8 +81,7 @@ npm run validate
 
 ### 多平台打包
 
-- Windows：`build-multiplatform.bat`
-- macOS / Linux Shell：`build-multiplatform.sh`
+- 详见 [`BUILD-MULTIPLATFORM.md`](./BUILD-MULTIPLATFORM.md)
 
 ## SDK 更新功能说明
 
@@ -92,7 +91,7 @@ npm run validate
 - `AutoGo.sdkChangelogUrl`：公开可访问的更新日志地址
 - `AutoGo.sdkDownloadBaseUrl`：公开可访问的 SDK 下载基础地址
 
-建议使用 HTTPS 地址，并由项目维护者在正式发布前统一配置。
+使用 HTTPS 地址，并由项目维护者在正式发布前统一配置。
 
 ## 项目结构
 
@@ -108,16 +107,6 @@ src/
 scripts/          # 辅助脚本
 .github/          # CI 配置
 ```
-
-## 发布前检查建议
-
-发布到 GitHub 之前，建议至少完成以下检查：
-
-1. 运行 `npm run validate`
-2. 确认 `LICENSE`、`README.md`、`CONTRIBUTING.md`、`SECURITY.md` 已更新
-3. 检查 `package.json` 中仓库地址、发布者信息与版本号是否正确
-4. 确认未提交 `node_modules/`、`dist/`、`out/`、日志与本地配置文件
-5. 搜索并移除密钥、私有地址、测试账户与临时调试代码
 
 ## 贡献与安全
 

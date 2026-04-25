@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const browseButton = document.getElementById('browseButton');
     const installAdbButton = document.getElementById('installAdbButton');
     const packsoCheckbox = document.getElementById('packsoEnabled');
+    const codeObfuscationCheckbox = document.getElementById('codeObfuscationEnabled');
     const showLogTimeCheckbox = document.getElementById('showLogTime');
     const showContextMenuCheckbox = document.getElementById('showContextMenu');
     const saveButton = document.getElementById('saveButton');
@@ -297,6 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // --- Load Basic Settings ---
                 if (adbPathInput) adbPathInput.value = settings.adbPath || '';
                 if (packsoCheckbox) packsoCheckbox.checked = settings.packso || false;
+                if (codeObfuscationCheckbox) codeObfuscationCheckbox.checked = settings.codeObfuscation || false;
                 // Default showLogTime to true if undefined
                 if (showLogTimeCheckbox) showLogTimeCheckbox.checked = settings.showLogTime === undefined ? true : settings.showLogTime;
                 // Default showContextMenu to true if undefined
@@ -413,6 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- Gather Basic Settings ---
             const adbPath = adbPathInput ? adbPathInput.value : '';
             const packso = packsoCheckbox ? packsoCheckbox.checked : false;
+            const codeObfuscation = codeObfuscationCheckbox ? codeObfuscationCheckbox.checked : false;
             const showLogTime = showLogTimeCheckbox ? showLogTimeCheckbox.checked : true;
             const showContextMenu = showContextMenuCheckbox ? showContextMenuCheckbox.checked : true;
 
@@ -432,6 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const payload = {
                 adbPath,
                 packso,
+                codeObfuscation,
                 apkArchitectures,
                 showLogTime,
                 showContextMenu,

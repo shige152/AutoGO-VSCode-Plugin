@@ -18,7 +18,7 @@ export function validateZipEntryPath(targetDir: string, entryPath: string): ZipS
   if (!entryPath) {
     return { ok: false, reason: 'empty' };
   }
-  if (entryPath.includes('\u0000')) {
+  if (entryPath.includes('\0')) {
     return { ok: false, reason: 'null-byte' };
   }
   if (isAbsoluteEntryPath(entryPath)) {

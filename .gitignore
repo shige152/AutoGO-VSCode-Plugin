@@ -19,10 +19,17 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 .vs/
-.vscode/
 .idea/
 .cursor/
 .roo/
+
+# VS Code 本地个人设置（不共享）
+.vscode/settings.json
+.vscode/extensions.json
+
+# VS Code 共享配置（已纳入版本控制）
+# .vscode/launch.json
+# .vscode/tasks.json
 
 # 环境变量与本地覆盖
 .env

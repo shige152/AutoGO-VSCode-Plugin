@@ -2,7 +2,7 @@
   "name": "qq1522355574-autogo",
   "displayName": "AutoGo-Plugin",
   "description": "AutoGo VS Code 扩展，提供项目初始化、运行调试、设备连接与 Android/iOS 编译能力。",
-  "version": "1.2.12",
+  "version": "1.2.13",
   "publisher": "weijinyichu",
   "icon": "AutoGo.png",
   "engines": {
@@ -56,6 +56,11 @@
           "default": false,
           "description": "编译时SO依赖一并打包嵌入"
         },
+        "AutoGo.codeObfuscation": {
+          "type": "boolean",
+          "default": false,
+          "description": "代码混淆"
+        },
         "AutoGo.apkArchitectures": {
           "type": "object",
           "default": {
@@ -68,7 +73,7 @@
         "AutoGo.selectedDevice": {
           "type": "string",
           "default": "",
-          "description": "The serial number of the selected ADB device for AutoGo operations."
+          "description": "用于 AutoGo 操作的所选 ADB 设备的序列号。"
         },
         "AutoGo.debugMode": {
           "type": "boolean",
@@ -106,12 +111,12 @@
         },
         "AutoGo.sdkChangelogUrl": {
           "type": "string",
-          "default": "",
+          "default": "https://autogo-1257133387.cos.ap-shanghai.myqcloud.com/changelog.md",
           "description": "AutoGo SDK 更新日志地址（可选，启用“更新 AutoGo 版本”功能时配置）"
         },
         "AutoGo.sdkDownloadBaseUrl": {
           "type": "string",
-          "default": "",
+          "default": "http://jgw.52ailin.com:7001/files/AutoGo/sdk/",
           "description": "AutoGo SDK 下载基础地址（可选，例如 https://example.com/sdk/）"
         }
       }
@@ -185,6 +190,11 @@
       {
         "command": "AutoGo.compileIPA",
         "title": "IPA 安装包",
+        "category": "AutoGo"
+      },
+      {
+        "command": "AutoGo.compileDEB",
+        "title": "DEB 安装包",
         "category": "AutoGo"
       },
       {
@@ -368,6 +378,11 @@
           "command": "AutoGo.compileIPA",
           "group": "2_ios@1",
           "when": "config.AutoGo.targetPlatform == 'ios'"
+        },
+        {
+          "command": "AutoGo.compileDEB",
+          "group": "3_ios@1",
+          "when": "config.AutoGo.targetPlatform == 'ios'"
         }
       ],
       "AutoGo.submenu.quickConfig": [
@@ -488,5 +503,13 @@
     "uuid": "^9.0.1",
     "ws": "^8.14.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shige152/AutoGO-VSCode-Plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shige152/AutoGO-VSCode-Plugin/issues"
+  },
+  "homepage": "https://github.com/shige152/AutoGO-VSCode-Plugin"
 }

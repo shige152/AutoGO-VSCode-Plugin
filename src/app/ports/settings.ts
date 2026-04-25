@@ -3,6 +3,7 @@ export interface Settings {
   debugMode: boolean;
   showLogTime: boolean;
   packso: boolean;
+  codeObfuscation: boolean;
   apkArchitectures: Record<string, boolean>;
   selectedDevice: string;
   customCommands: { label: string; command: string }[];

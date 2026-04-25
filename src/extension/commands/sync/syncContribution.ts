@@ -1,12 +1,15 @@
-import * as child_process from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { ConfigService } from '../../../services/configService';
 import { OutputChannel } from '../../../services/outputChannel';
-import { executeCommand, handleProcessOutput, LogLevel } from '../../../utils/processUtils';
+import { executeCommand } from '../../../utils/processUtils';
+import {
+  USER_MESSAGES,
+  formatDeviceNotConnected,
+  formatFileNotFound,
+} from '../../../utils/userMessages';
 import { ensureLogViewVisible } from '../../views/logViewVisibility';
-import { LogPanelManager } from '../../views/logPanelManager';
 import { resolveAdbPathForCommand } from '../../adbPathResolver';
 import { registerPushCommand } from './pushProject';
 import { registerPushFileCommand } from './pushFile';
@@ -25,6 +28,34 @@ export interface SyncCommandDeps {
 export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[] {
   const { context, outputChannel, configService, getAgPath, getLogViewPreference } = deps;
   const disposables: vscode.Disposable[] = [];
+  const logActionState = (
+    action: string,
+    state: 'start' | 'success' | 'failure'
+  ): void => {
+    if (state === 'start') {
+      outputChannel.success(`开始${action}`);
+      return;
+    }
+
+    if (state === 'success') {
+      outputChannel.success(`${action}结束`);
+      return;
+    }
+
+    outputChannel.error(`${action}失败`);
+  };
+  const logBatchResult = (
+    action: string,
+    successCount: number,
+    failCount: number
+  ): void => {
+    if (failCount === 0) {
+      outputChannel.success(`${action}结束，共 ${successCount} 个文件`);
+      return;
+    }
+
+    outputChannel.warn(`${action}结束，成功 ${successCount} 个，失败 ${failCount} 个`);
+  };
 
   disposables.push(
     registerPushCommand(async () => {
@@ -36,7 +67,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       });
 
       if (!localPath) {
-        outputChannel.warn('未输入本地路径。');
         return;
       }
 
@@ -47,12 +77,10 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       });
 
       if (!remotePath) {
-        outputChannel.warn('未输入远程路径。');
         return;
       }
 
-      LogPanelManager.render(context);
-      outputChannel.success(`开始推送 ${localPath} 到 ${remotePath}...`);
+      ensureLogViewVisible(context, getLogViewPreference());
 
       const adbPath = await resolveAdbPathForCommand(configService, outputChannel);
       if (!adbPath) {
@@ -60,24 +88,34 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       }
       const selectedDevice = configService.selectedDevice;
       const debugMode = configService.debugMode;
-
-      let command = `"${adbPath}"`;
-      if (selectedDevice) {
-        command += ` -s ${selectedDevice}`;
-      }
-      command += ` push "${localPath}" "${remotePath}"`;
-
-      if (debugMode) {
-        outputChannel.success(`执行命令: ${command}`);
-      }
+      logActionState('推送', 'start');
 
       try {
-        const pushProcess = child_process.spawn(command, [], { shell: true });
-        handleProcessOutput(pushProcess, outputChannel, '推送(已弃用)', {
-          debugMode: debugMode,
-          minLogLevel: LogLevel.INFO,
-        });
+        const args = [];
+        if (selectedDevice) {
+          args.push('-s', selectedDevice);
+        }
+        args.push('push', localPath, remotePath);
+
+        const result = await executeCommand(
+          adbPath,
+          args,
+          outputChannel,
+          {
+            debugMode: debugMode,
+            commandDisplayName: '推送',
+            shell: false,
+          }
+        );
+
+        if (!result.success) {
+          logActionState('推送', 'failure');
+          return;
+        }
+
+        logActionState('推送', 'success');
       } catch (error) {
+        logActionState('推送', 'failure');
         const errorMsg = `执行推送命令时发生异常: ${error instanceof Error ? error.message : String(error)}`;
         outputChannel.error(errorMsg);
       }
@@ -96,7 +134,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       });
 
       if (!fileUris || fileUris.length === 0) {
-        outputChannel.warn('未选择文件。');
         return;
       }
 
@@ -119,7 +156,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       let remotePath: string | undefined;
 
       if (!selectedOption) {
-        outputChannel.warn('未选择目标路径。');
         return;
       }
 
@@ -129,7 +165,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
           placeHolder: defaultRemotePath,
         });
         if (!remotePath) {
-          outputChannel.warn('未输入自定义远程路径。');
           return;
         }
       } else {
@@ -137,7 +172,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       }
 
       ensureLogViewVisible(context, getLogViewPreference());
-      outputChannel.success(`开始推送文件 ${localPath} 到 ${remotePath}...`);
 
       const adbPath = await resolveAdbPathForCommand(configService, outputChannel);
       if (!adbPath) {
@@ -145,6 +179,7 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       }
       const selectedDevice = configService.selectedDevice;
       const debugMode = configService.debugMode;
+      logActionState('推送文件', 'start');
 
       try {
         const args = [];
@@ -165,11 +200,17 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
         );
 
         if (!result.success) {
-          outputChannel.error('推送文件命令执行失败。请查看上面的日志获取详细信息。');
+          logActionState('推送文件', 'failure');
+          return;
         }
+
+        logActionState('推送文件', 'success');
       } catch (error) {
-        const errorMsg = `执行推送文件命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-        outputChannel.error(errorMsg);
+        logActionState('推送文件', 'failure');
+        if (debugMode) {
+          const errorMsg = `执行推送文件命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+          outputChannel.error(errorMsg);
+        }
       }
 
       async function pushFileToIos(): Promise<void> {
@@ -187,7 +228,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
         });
 
         if (!fileUris || fileUris.length === 0) {
-          outputChannel.warn('未选择文件。');
           return;
         }
 
@@ -195,12 +235,12 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
         const fileName = path.basename(localPath);
 
         if (!fs.existsSync(localPath)) {
-          outputChannel.error(`文件不存在: ${localPath}`);
+          outputChannel.error(formatFileNotFound(localPath));
           return;
         }
 
         ensureLogViewVisible(context, getLogViewPreference());
-        outputChannel.success(`开始推送文件 ${fileName} 到 iOS 设备...`);
+        logActionState('推送文件', 'start');
 
         try {
           const fileData = fs.readFileSync(localPath);
@@ -209,13 +249,12 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
           const result = await client.pushFile(remotePath, fileData);
 
           if (result.success) {
-            outputChannel.success(`文件推送成功: Documents/${fileName}`);
+            logActionState('推送文件', 'success');
           } else {
-            outputChannel.error(`文件推送失败: ${result.error}`);
+            outputChannel.error(`推送文件失败: ${result.error}`);
           }
         } catch (error) {
-          const errorMsg = `推送文件时发生异常: ${error instanceof Error ? error.message : String(error)}`;
-          outputChannel.error(errorMsg);
+          outputChannel.error(`推送文件失败: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }),
@@ -233,7 +272,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       });
 
       if (!folderUris || folderUris.length === 0) {
-        outputChannel.warn('未选择目录。');
         return;
       }
 
@@ -256,7 +294,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       let remotePath: string | undefined;
 
       if (!selectedOption) {
-        outputChannel.warn('未选择目标路径。');
         return;
       }
 
@@ -266,7 +303,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
           placeHolder: defaultRemotePath,
         });
         if (!remotePath) {
-          outputChannel.warn('未输入自定义远程路径。');
           return;
         }
       } else {
@@ -274,7 +310,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       }
 
       ensureLogViewVisible(context, getLogViewPreference());
-      outputChannel.success(`开始推送目录 ${localPath} 到 ${remotePath}...`);
 
       const adbPath = await resolveAdbPathForCommand(configService, outputChannel);
       if (!adbPath) {
@@ -282,6 +317,7 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       }
       const selectedDevice = configService.selectedDevice;
       const debugMode = configService.debugMode;
+      logActionState('推送目录', 'start');
 
       try {
         const args = [];
@@ -302,11 +338,17 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
         );
 
         if (!result.success) {
-          outputChannel.error('推送目录命令执行失败。请查看上面的日志获取详细信息。');
+          logActionState('推送目录', 'failure');
+          return;
         }
+
+        logActionState('推送目录', 'success');
       } catch (error) {
-        const errorMsg = `执行推送目录命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-        outputChannel.error(errorMsg);
+        logActionState('推送目录', 'failure');
+        if (debugMode) {
+          const errorMsg = `执行推送目录命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+          outputChannel.error(errorMsg);
+        }
       }
 
       async function pushFolderToIos(): Promise<void> {
@@ -324,7 +366,6 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
         });
 
         if (!folderUris || folderUris.length === 0) {
-          outputChannel.warn('未选择目录。');
           return;
         }
 
@@ -332,7 +373,7 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
         const folderName = path.basename(localFolderPath);
 
         ensureLogViewVisible(context, getLogViewPreference());
-        outputChannel.success(`开始推送目录 ${folderName} 到 iOS 设备...`);
+        logActionState('推送目录', 'start');
 
         try {
           const files = getAllFiles(localFolderPath);
@@ -348,21 +389,16 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
 
             if (result.success) {
               successCount++;
-              outputChannel.log(`已推送: ${relativePath}`);
             } else {
               failCount++;
               outputChannel.error(`推送失败: ${relativePath} - ${result.error}`);
             }
           }
 
-          if (failCount === 0) {
-            outputChannel.success(`目录推送完成，共 ${successCount} 个文件`);
-          } else {
-            outputChannel.warn(`目录推送完成，成功 ${successCount} 个，失败 ${failCount} 个`);
-          }
+          logBatchResult('推送目录', successCount, failCount);
         } catch (error) {
-          const errorMsg = `推送目录时发生异常: ${error instanceof Error ? error.message : String(error)}`;
-          outputChannel.error(errorMsg);
+          logActionState('推送目录', 'failure');
+          outputChannel.error(`推送目录失败: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }),
@@ -373,18 +409,18 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
       }
 
       ensureLogViewVisible(context, getLogViewPreference());
-      outputChannel.success('开始同步 resources/libs 和 resources/assets...');
       const debugMode = configService.debugMode;
 
       const agPath = getAgPath();
       if (!agPath) return;
+      logActionState('同步资源', 'start');
 
       const selectedDevice = configService.selectedDevice;
 
       try {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
-          outputChannel.error('未找到工作区，无法确定项目根目录。');
+          outputChannel.error(USER_MESSAGES.workspaceNotFound);
           return;
         }
         const cwd = workspaceFolders[0].uri.fsPath;
@@ -407,11 +443,17 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
         );
 
         if (!result.success) {
-          outputChannel.error('部署资源命令执行失败。请查看上面的日志获取详细信息。');
+          logActionState('同步资源', 'failure');
+          return;
         }
+
+        logActionState('同步资源', 'success');
       } catch (error) {
-        const errorMsg = `执行同步命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
-        outputChannel.error(errorMsg);
+        logActionState('同步资源', 'failure');
+        if (debugMode) {
+          const errorMsg = `执行同步命令时发生未预料的异常: ${error instanceof Error ? error.message : String(error)}`;
+          outputChannel.error(errorMsg);
+        }
       }
 
       async function syncFilesToIos(): Promise<void> {
@@ -423,20 +465,30 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
 
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
-          outputChannel.error('未找到工作区，无法确定项目根目录。');
+          outputChannel.error(USER_MESSAGES.workspaceNotFound);
           return;
         }
         const workspaceRoot = workspaceFolders[0].uri.fsPath;
 
         ensureLogViewVisible(context, getLogViewPreference());
-        outputChannel.success('开始同步 resources/assets 和 resources/libs/ios...');
+        logActionState('同步资源', 'start');
 
         try {
           let successCount = 0;
           let failCount = 0;
 
           const assetsDir = path.join(workspaceRoot, 'resources', 'assets');
-          if (fs.existsSync(assetsDir)) {
+          const hasAssetsDir = fs.existsSync(assetsDir);
+          const libsIosDir = path.join(workspaceRoot, 'resources', 'libs', 'ios');
+          const hasLibsIosDir = fs.existsSync(libsIosDir);
+
+          if (!hasAssetsDir && !hasLibsIosDir) {
+            outputChannel.warn('未找到可同步的资源目录：resources/assets、resources/libs/ios');
+            logActionState('同步资源', 'failure');
+            return;
+          }
+
+          if (hasAssetsDir) {
             const assetsFiles = getAllFiles(assetsDir);
             for (const filePath of assetsFiles) {
               const relativePath = path.relative(assetsDir, filePath);
@@ -447,18 +499,14 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
 
               if (result.success) {
                 successCount++;
-                outputChannel.log(`[assets] 已推送: ${relativePath}`);
               } else {
                 failCount++;
                 outputChannel.error(`[assets] 推送失败: ${relativePath} - ${result.error}`);
               }
             }
-          } else {
-            outputChannel.warn('resources/assets 目录不存在，跳过');
           }
 
-          const libsIosDir = path.join(workspaceRoot, 'resources', 'libs', 'ios');
-          if (fs.existsSync(libsIosDir)) {
+          if (hasLibsIosDir) {
             const dylibFiles = fs.readdirSync(libsIosDir).filter((f) => f.endsWith('.dylib'));
             for (const dylibFile of dylibFiles) {
               const filePath = path.join(libsIosDir, dylibFile);
@@ -469,24 +517,17 @@ export function registerSyncCommands(deps: SyncCommandDeps): vscode.Disposable[]
 
               if (result.success) {
                 successCount++;
-                outputChannel.log(`[libs/ios] 已推送: ${dylibFile}`);
               } else {
                 failCount++;
                 outputChannel.error(`[libs/ios] 推送失败: ${dylibFile} - ${result.error}`);
               }
             }
-          } else {
-            outputChannel.warn('resources/libs/ios 目录不存在，跳过');
           }
 
-          if (failCount === 0) {
-            outputChannel.success(`资源同步完成，共 ${successCount} 个文件`);
-          } else {
-            outputChannel.warn(`资源同步完成，成功 ${successCount} 个，失败 ${failCount} 个`);
-          }
+          logBatchResult('同步资源', successCount, failCount);
         } catch (error) {
-          const errorMsg = `同步资源时发生异常: ${error instanceof Error ? error.message : String(error)}`;
-          outputChannel.error(errorMsg);
+          logActionState('同步资源', 'failure');
+          outputChannel.error(`同步资源失败: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     })
@@ -524,14 +565,7 @@ async function selectIosDevice(
 ): Promise<{ host: string; client: NonNullable<ReturnType<typeof iosConnectionManager.getClient>> } | null> {
   const devices = iosConnectionManager.getAllDevices();
   if (devices.length === 0) {
-    const result = await vscode.window.showWarningMessage(
-      '没有已连接的 iOS 设备，是否先连接设备？',
-      '连接设备',
-      '取消'
-    );
-    if (result === '连接设备') {
-      await vscode.commands.executeCommand('AutoGo.connect');
-    }
+    outputChannel.warn(USER_MESSAGES.noIosDeviceConnected);
     return null;
   }
 
@@ -555,7 +589,7 @@ async function selectIosDevice(
 
   const client = iosConnectionManager.getClient(selectedHost);
   if (!client) {
-    outputChannel.error(`设备 ${selectedHost} 未连接`);
+    outputChannel.error(formatDeviceNotConnected(selectedHost));
     return null;
   }
 

@@ -43,7 +43,7 @@ export class UpdateAutoGoService {
   }
 
   async fetchVersions(): Promise<VersionInfo[]> {
-    const changelogUrl = this.getRequiredUrl('sdkChangelogUrl', '\u66f4\u65b0\u65e5\u5fd7\u5730\u5740');
+    const changelogUrl = this.getRequiredUrl('sdkChangelogUrl', '更新日志地址');
     const changelog = await this.httpGetText(changelogUrl, 10000);
     const versions = this.parseVersions(changelog);
     if (versions.length === 0) {
@@ -71,14 +71,14 @@ export class UpdateAutoGoService {
 
     if (!fs.existsSync(cachedFilePath)) {
       const downloadUrl = this.getDownloadUrl(version);
-      this.outputChannel.log(`\u5f00\u59cb\u4e0b\u8f7d v${version}...`);
+      this.outputChannel.log(`开始下载 v${version}...`);
       await this.downloadWithProgress(downloadUrl, tmpDownloadPath);
 
       if (fs.existsSync(cachedFilePath)) {
         fs.unlinkSync(cachedFilePath);
       }
       fs.renameSync(tmpDownloadPath, cachedFilePath);
-      this.outputChannel.success('\u4e0b\u8f7d\u5b8c\u6210');
+      this.outputChannel.success('下载完成');
     }
 
     await this.installFromCache(cachedFilePath, agExecutablePath);
@@ -88,7 +88,7 @@ export class UpdateAutoGoService {
       fs.chmodSync(cachedFilePath, 0o755);
     }
 
-    this.outputChannel.success(`\u5df2\u5207\u6362\u5230 v${version}`);
+    this.outputChannel.success(`已切换到 v${version}`);
     await this.silentInitProject(agExecutablePath, workspaceDir);
   }
 
@@ -98,18 +98,18 @@ export class UpdateAutoGoService {
       : this.configService.sdkDownloadBaseUrl;
 
     if (!configuredValue) {
-      throw new Error(`\u672a\u914d\u7f6e AutoGo.${key}\uff0c\u65e0\u6cd5\u4f7f\u7528 SDK \u66f4\u65b0\u529f\u80fd\u3002\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u63d0\u4f9b\u516c\u5f00\u7684${label}\u3002`);
+      throw new Error(`未配置 AutoGo.${key}，无法使用 SDK 更新功能。请在设置中提供公开的${label}。`);
     }
 
     let parsed: URL;
     try {
       parsed = new URL(configuredValue);
     } catch {
-      throw new Error(`AutoGo.${key} \u914d\u7f6e\u65e0\u6548\uff1a${configuredValue}`);
+      throw new Error(`AutoGo.${key} 配置无效：${configuredValue}`);
     }
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new Error(`AutoGo.${key} \u4ec5\u652f\u6301 http/https \u5730\u5740\uff1a${configuredValue}`);
+      throw new Error(`AutoGo.${key} 仅支持 http/https 地址：${configuredValue}`);
     }
 
     return configuredValue;
@@ -125,7 +125,7 @@ export class UpdateAutoGoService {
         if (statusCode >= 300 && statusCode < 400 && location) {
           res.resume();
           if (redirectCount >= MAX_REDIRECTS) {
-            reject(new Error(`\u91cd\u5b9a\u5411\u6b21\u6570\u8fc7\u591a\uff1a${url}`));
+            reject(new Error(`重定向次数过多：${url}`));
             return;
           }
 
@@ -136,7 +136,7 @@ export class UpdateAutoGoService {
 
         if (statusCode < 200 || statusCode >= 300) {
           res.resume();
-          reject(new Error(`\u8bf7\u6c42\u5931\u8d25 (${statusCode})\uff1a${url}`));
+          reject(new Error(`请求失败 (${statusCode})：${url}`));
           return;
         }
 
@@ -196,7 +196,7 @@ export class UpdateAutoGoService {
         if (statusCode >= 300 && statusCode < 400 && location) {
           res.resume();
           if (redirectCount >= MAX_REDIRECTS) {
-            fail(new Error(`\u91cd\u5b9a\u5411\u6b21\u6570\u8fc7\u591a\uff1a${url}`));
+            fail(new Error(`重定向次数过多：${url}`));
             return;
           }
 
@@ -207,7 +207,7 @@ export class UpdateAutoGoService {
 
         if (statusCode < 200 || statusCode >= 300) {
           res.resume();
-          fail(new Error(`\u4e0b\u8f7d\u5931\u8d25 (${statusCode})\uff1a${url}`));
+          fail(new Error(`下载失败 (${statusCode})：${url}`));
           return;
         }
 
@@ -222,7 +222,7 @@ export class UpdateAutoGoService {
           if (totalBytes) {
             const percent = Math.floor((transferredBytes / totalBytes) * 100);
             if (percent >= lastPercent + 5 || percent === 100) {
-              this.outputChannel.log(`\u4e0b\u8f7d\u8fdb\u5ea6: ${percent}%`);
+              this.outputChannel.log(`下载进度: ${percent}%`);
               lastPercent = percent;
             }
           }
@@ -252,7 +252,7 @@ export class UpdateAutoGoService {
     const sourceStats = fs.statSync(sourcePath);
     const targetStats = fs.statSync(targetPath);
     if (sourceStats.size !== targetStats.size) {
-      throw new Error(`\u6587\u4ef6\u5927\u5c0f\u4e0d\u5339\u914d: ${sourceStats.size} bytes vs ${targetStats.size} bytes`);
+      throw new Error(`文件大小不匹配: ${sourceStats.size} bytes vs ${targetStats.size} bytes`);
     }
   }
 
@@ -269,7 +269,7 @@ export class UpdateAutoGoService {
     if (process.platform === 'darwin') {
       return '/Users/Shared';
     }
-    throw new Error(`\u4e0d\u652f\u6301\u7684\u5e73\u53f0: ${process.platform}`);
+    throw new Error(`不支持的平台: ${process.platform}`);
   }
 
   private getVersionedFileName(version: string): string {
@@ -280,7 +280,7 @@ export class UpdateAutoGoService {
   }
 
   private getDownloadUrl(version: string): string {
-    const baseUrl = this.getRequiredUrl('sdkDownloadBaseUrl', 'SDK \u4e0b\u8f7d\u5730\u5740').replace(/\/+$/, '');
+    const baseUrl = this.getRequiredUrl('sdkDownloadBaseUrl', 'SDK 下载地址').replace(/\/+$/, '');
 
     if (process.platform === 'win32') {
       return `${baseUrl}/win_x64_${version}`;
@@ -291,7 +291,7 @@ export class UpdateAutoGoService {
       return `${baseUrl}/${archString}_${version}`;
     }
 
-    throw new Error(`\u4e0d\u652f\u6301\u7684\u5e73\u53f0: ${process.platform}`);
+    throw new Error(`不支持的平台: ${process.platform}`);
   }
 
   private parseVersions(changelog: string): Array<Omit<VersionInfo, 'cached'>> {
@@ -329,11 +329,11 @@ export class UpdateAutoGoService {
       });
 
       if (this.configService.debugMode && result.status !== 0) {
-        this.outputChannel.error(`\u521d\u59cb\u5316\u5931\u8d25: ${result.stderr || result.stdout}`);
+        this.outputChannel.error(`初始化失败: ${result.stderr || result.stdout}`);
       }
     } catch (error) {
       if (this.configService.debugMode) {
-        this.outputChannel.error(`\u521d\u59cb\u5316\u5931\u8d25: ${error instanceof Error ? error.message : String(error)}`);
+        this.outputChannel.error(`初始化失败: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }

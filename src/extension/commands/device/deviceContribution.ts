@@ -20,7 +20,21 @@ export interface DeviceCommandDeps {
 
 export function registerDeviceCommands(deps: DeviceCommandDeps): vscode.Disposable[] {
   const { context, outputChannel, configService, adbService, iosDebugService, getLogViewPreference } = deps;
+  const iosDeviceStateKey = 'autogo.selectedIosDevice';
   const disposables: vscode.Disposable[] = [];
+  const logActionState = (state: 'start' | 'success' | 'failure'): void => {
+    if (state === 'start') {
+      outputChannel.success('开始连接');
+      return;
+    }
+
+    if (state === 'success') {
+      outputChannel.success('连接结束');
+      return;
+    }
+
+    outputChannel.error('连接失败');
+  };
 
   disposables.push(
     registerConnectCommand(async () => {
@@ -37,12 +51,10 @@ export function registerDeviceCommands(deps: DeviceCommandDeps): vscode.Disposab
       if (!adbPath) {
         return;
       }
-      outputChannel.success('正在查找设备...');
       const devices = await adbService.getDevices(adbPath);
 
       const quickPickItems: string[] = ['远程调试'];
       if (devices.length > 0) {
-        outputChannel.success(`找到 ${devices.length} 个设备: ${devices.join(', ')}`);
         devices.forEach((device: string) => {
           quickPickItems.push(device);
         });
@@ -53,7 +65,6 @@ export function registerDeviceCommands(deps: DeviceCommandDeps): vscode.Disposab
       });
 
       if (!selectedOption) {
-        outputChannel.success('用户取消了连接');
         return;
       }
 
@@ -99,13 +110,27 @@ export function registerDeviceCommands(deps: DeviceCommandDeps): vscode.Disposab
           return;
         }
 
+        const normalizedHost = host.trim();
+
         // 2. 执行连接（端口固定 8820）
-        const success = await iosDebugService.connectDevice(host.trim(), DEFAULT_IOS_DEBUG_PORT);
+        logActionState('start');
+        const success = await iosDebugService.connectDevice(normalizedHost, DEFAULT_IOS_DEBUG_PORT);
 
         if (success) {
-          vscode.window.showInformationMessage(`成功连接到 iOS 设备 ${host}`);
+          logActionState('success');
+          try {
+            await context.globalState.update(iosDeviceStateKey, normalizedHost);
+            outputChannel.success(`已选择 iOS 设备: ${normalizedHost}`);
+            if (configService.debugMode) {
+              outputChannel.log(`状态已更新: ${iosDeviceStateKey} = ${normalizedHost}`);
+            }
+          } catch (updateError) {
+            outputChannel.error(
+              `更新设备配置失败: ${updateError instanceof Error ? updateError.message : String(updateError)}`
+            );
+          }
         } else {
-          vscode.window.showErrorMessage(`连接 iOS 设备 ${host} 失败`);
+          logActionState('failure');
         }
       }
     })
@@ -127,7 +152,6 @@ async function connectWireless(
   });
 
   if (!selectedMethod) {
-    outputChannel.success('用户取消了连接方式选择');
     return;
   }
 
@@ -141,7 +165,6 @@ async function connectWireless(
       prompt: '请输入设备IP地址和端口（格式：IP:端口）',
     });
     if (!ipAddress) {
-      outputChannel.success('用户取消了IP地址输入');
       return;
     }
     if (!ipAddress.includes(':') || ipAddress.includes(';')) {
@@ -156,7 +179,6 @@ async function connectWireless(
       prompt: '请输入AutoGo服务配对码',
     });
     if (!pairingCode) {
-      outputChannel.success('用户取消了配对码输入');
       return;
     }
     if (!/^\d{5}$/.test(pairingCode)) {
@@ -188,18 +210,19 @@ async function connectWireless(
     isUsingPairingCode = true;
     connectionString = pairAddress;
   } else {
-    outputChannel.success('未知的连接方式');
     return;
   }
 
   try {
+    outputChannel.success('开始连接');
+
     if (isUsingPairingCode) {
       if (!pairingCodeInput) {
         outputChannel.error('内部错误：配对码未定义但需要执行配对。');
+        outputChannel.error('连接失败');
         return;
       }
       const pairArgs = ['pair', connectionString, pairingCodeInput];
-      outputChannel.log(`尝试执行 ADB Pair: ${adbPath} ${pairArgs.join(' ')}`);
 
       const pairProcess = child_process.spawn(`\"${adbPath}\"`, pairArgs, { shell: true });
 
@@ -220,11 +243,10 @@ async function connectWireless(
       const pairSuccess = await new Promise<boolean>((resolve) => {
         pairProcess.on('close', (code) => {
           if (pairOutput.toLowerCase().includes('successfully paired')) {
-            outputChannel.success(`成功与设备配对: ${connectionString}`);
             resolve(true);
           } else {
             const failureMsg = pairErrorOutput || pairOutput || `配对命令执行失败，退出码: ${code}`;
-            outputChannel.error(`配对设备 ${connectionString} 失败: ${failureMsg}`);
+            outputChannel.error(`配对失败: ${failureMsg}`);
             resolve(false);
           }
         });
@@ -235,6 +257,7 @@ async function connectWireless(
       });
 
       if (!pairSuccess) {
+        outputChannel.error('连接失败');
         return;
       }
 
@@ -245,26 +268,35 @@ async function connectWireless(
         value: '5555',
       });
 
-      if (!connectPort || !/^\d+$/.test(connectPort)) {
+      if (!connectPort) {
+        return;
+      }
+
+      if (!/^\d+$/.test(connectPort)) {
         outputChannel.error('无效的连接端口号。');
+        outputChannel.error('连接失败');
         return;
       }
       connectionString = `${ipOnly}:${connectPort}`;
-      outputChannel.success(`准备使用地址连接: ${connectionString}`);
     }
 
     if (!connectionString) {
       outputChannel.error('无法确定连接地址。');
+      outputChannel.error('连接失败');
       return;
     }
 
     const connectSuccess = await attemptAdbConnection(connectionString, adbPath, outputChannel, configService);
-    if (!connectSuccess && debugMode) {
-      outputChannel.log('ADB 连接尝试未成功。');
+    if (connectSuccess) {
+      outputChannel.success('连接结束');
+      outputChannel.success(`已选择设备: ${connectionString}`);
+    } else {
+      outputChannel.error('连接失败');
     }
   } catch (error) {
     const errorMsg = `连接设备时发生异常: ${error instanceof Error ? error.message : String(error)}`;
     outputChannel.error(errorMsg);
+    outputChannel.error('连接失败');
   }
 }
 
@@ -322,7 +354,6 @@ async function attemptAdbConnection(
     }
   }
 
-  outputChannel.log(`尝试连接到: ${deviceAddress} .....`);
   const connectCommand = `\"${adbPath}\" connect ${deviceAddress}`;
 
   if (debugMode) {
@@ -349,11 +380,6 @@ async function attemptAdbConnection(
     connectProcess.on('close', async (code) => {
       const lowerOutput = outputData.toLowerCase();
       if (lowerOutput.includes('connected to') || lowerOutput.includes('already connected')) {
-        if (lowerOutput.includes('already connected')) {
-          outputChannel.success(`设备 ${deviceAddress} 已连接`);
-        } else {
-          outputChannel.success(`成功连接到设备: ${deviceAddress}`);
-        }
         try {
           await vscode.workspace
             .getConfiguration(CONFIG_SECTION)
@@ -371,11 +397,13 @@ async function attemptAdbConnection(
         const combinedOutput = (outputData + ' ' + errorData).toLowerCase();
 
         if (
-          combinedOutput.includes('daemon not running') ||
-          combinedOutput.includes('daemon still not running') ||
-          combinedOutput.includes('cannot connect to daemon')
-        ) {
-          outputChannel.warn('检测到ADB守护进程问题，尝试重启ADB服务');
+            combinedOutput.includes('daemon not running') ||
+            combinedOutput.includes('daemon still not running') ||
+            combinedOutput.includes('cannot connect to daemon')
+          ) {
+          if (debugMode) {
+            outputChannel.warn('检测到ADB守护进程问题，尝试重启ADB服务');
+          }
 
           try {
             await new Promise<void>((resolveRestart) => {
@@ -391,7 +419,9 @@ async function attemptAdbConnection(
             });
 
             setTimeout(async () => {
-              outputChannel.log('重新尝试连接...');
+              if (debugMode) {
+                outputChannel.log('重新尝试连接...');
+              }
               const retryConnectProcess = child_process.spawn(`\"${adbPath}\" connect ${deviceAddress}`, [], { shell: true });
 
               let retryOutput = '';
@@ -406,7 +436,6 @@ async function attemptAdbConnection(
                   retryOutput.toLowerCase().includes('connected to') ||
                   retryOutput.toLowerCase().includes('already connected')
                 ) {
-                  outputChannel.success(`重启ADB后成功连接到设备: ${deviceAddress}`);
                   try {
                     await vscode.workspace
                       .getConfiguration(CONFIG_SECTION)
@@ -418,13 +447,12 @@ async function attemptAdbConnection(
                   }
                   resolve(true);
                 } else {
-                  outputChannel.error(`重启ADB后仍然无法连接到设备: ${deviceAddress}`);
                   resolve(false);
                 }
               });
 
               retryConnectProcess.on('error', () => {
-                outputChannel.error('重启ADB后执行连接命令失败');
+                outputChannel.error('执行连接命令失败');
                 resolve(false);
               });
             }, 1000);

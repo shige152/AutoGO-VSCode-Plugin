@@ -165,6 +165,7 @@ export class SettingsPanel {
         const config = vscode.workspace.getConfiguration('AutoGo');
         const currentSettings = {
             packso: config.get<boolean>('packso', false),
+            codeObfuscation: config.get<boolean>('codeObfuscation', false),
             adbPath: config.get<string>('adbPath', ''),
             apkArchitectures: config.get<object>('apkArchitectures', { 'arm64-v8a': true, 'x86_64': true, 'x86': true }),
             showLogTime: config.get<boolean>('showLogTime', true),
@@ -238,6 +239,7 @@ export class SettingsPanel {
     // New handler function for saving all settings
     private async handleSaveAllSettings(payload: {
         packso: boolean;
+        codeObfuscation: boolean;
         adbPath: string;
         apkArchitectures: object;
         showLogTime: boolean;
@@ -252,6 +254,7 @@ export class SettingsPanel {
         try {
             // Update basic settings
             await config.update('packso', payload.packso, vscode.ConfigurationTarget.Global);
+            await config.update('codeObfuscation', payload.codeObfuscation, vscode.ConfigurationTarget.Global);
             await config.update('adbPath', payload.adbPath, vscode.ConfigurationTarget.Global);
             await config.update('apkArchitectures', payload.apkArchitectures, vscode.ConfigurationTarget.Global);
             await config.update('showLogTime', payload.showLogTime, vscode.ConfigurationTarget.Global);
@@ -363,11 +366,17 @@ export class SettingsPanel {
                             <section id="section-build" class="settings-section">
                                 <h2>打包设置</h2>
 
-                                <div class="setting-item">
-                                    <label for="packsoEnabled" class="main-label">编译时 SO 依赖一并打包</label>
-                                    <div class="checkbox-container">
+                                <div class="setting-item setting-item--compact">
+                                    <div class="checkbox-container checkbox-container--compact">
                                         <input type="checkbox" id="packsoEnabled" name="packsoEnabled">
-                                        <label for="packsoEnabled" class="checkbox-label">将 SO 依赖库嵌入到编译后的二进制文件</label>
+                                        <label for="packsoEnabled" class="checkbox-label checkbox-label--primary">将 SO 依赖库嵌入到编译后的二进制文件</label>
+                                    </div>
+                                </div>
+
+                                <div class="setting-item setting-item--compact">
+                                    <div class="checkbox-container checkbox-container--compact">
+                                        <input type="checkbox" id="codeObfuscationEnabled" name="codeObfuscationEnabled">
+                                        <label for="codeObfuscationEnabled" class="checkbox-label checkbox-label--primary">代码混淆</label>
                                     </div>
                                 </div>
 
